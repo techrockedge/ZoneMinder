@@ -1,4 +1,5 @@
 <?php
+namespace ZM;
 require_once('database.php');
 require_once('Server.php');
 
@@ -37,6 +38,8 @@ private $defaults = array(
   'Palette' =>  '0',
   'Orientation' => null,
   'Deinterlacing' =>  0,
+  'DecoderHWAccelName'  =>  null,
+  'DecoderHWAccelDevice'  =>  null,
   'SaveJPEGs' =>  3,
   'VideoWriter' =>  '0',
   'OutputCodec' =>  null,
@@ -60,13 +63,14 @@ private $defaults = array(
   'StreamReplayBuffer'  => 0,
   'AlarmFrameCount'     =>  1,
   'SectionLength'       =>  600,
+  'MinSectionLength'    =>  10,
   'FrameSkip'           =>  0,
   'AnalysisFPSLimit'  =>  null,
-  'AnalysisUpdateDelete'  =>  0,
+  'AnalysisUpdateDelay'  =>  0,
   'MaxFPS' => null,
   'AlarmMaxFPS' => null,
-  'FPSReportIneterval'  =>  100,
-  'RefBlencPerc'        =>  6,
+  'FPSReportInterval'  =>  100,
+  'RefBlendPerc'        =>  6,
   'AlarmRefBlendPerc'   =>  6,
   'Controllable'        =>  0,
   'ControlId' =>  null,
@@ -77,7 +81,6 @@ private $defaults = array(
   'TrackDelay'      =>  null,
   'ReturnLocation'  =>  -1,
   'ReturnDelay'     =>  null,
-  'DefaultView' =>  'Events',
   'DefaultRate' =>  100,
   'DefaultScale'  =>  100,
   'SignalCheckPoints' =>  0,
@@ -99,8 +102,10 @@ private $defaults = array(
   'ArchivedEventDiskSpace' =>  null,
   'ZoneCount' =>  0,
   'Refresh' => null,
+  'DefaultCodec'  => 'auto',
 );
 private $status_fields = array(
+  'Status'  =>  null,
   'AnalysisFPS' => null,
   'CaptureFPS' => null,
   'CaptureBandwidth' => null,
@@ -112,6 +117,7 @@ private $control_fields = array(
   'CanWake' => '0',
   'CanSleep' => '0',
   'CanReset' => '0',
+  'CanReboot' =>  '0',
   'CanZoom' => '0',
   'CanAutoZoom' => '0',
   'CanZoomAbs' => '0',
@@ -266,17 +272,27 @@ private $control_fields = array(
       return $this->{$fn};
         #array_unshift($args, $this);
         #call_user_func_array( $this->{$fn}, $args);
-    } else {
-      if ( array_key_exists($fn, $this->control_fields) ) {
+    } else if ( array_key_exists($fn, $this->control_fields) ) {
         return $this->control_fields{$fn};
-      } else if ( array_key_exists( $fn, $this->defaults ) ) {
+    } else if ( array_key_exists( $fn, $this->defaults ) ) {
         return $this->defaults{$fn};
+    } else if ( array_key_exists( $fn, $this->status_fields) ) {
+      $sql = 'SELECT Status,CaptureFPS,AnalysisFPS,CaptureBandwidth
+        FROM Monitor_Status WHERE MonitorId=?';
+      $row = dbFetchOne($sql, NULL, array($this->{'Id'}));
+      if ( !$row ) {
+        Error("Unable to load Monitor record for Id=" . $this->{'Id'});
       } else {
-        $backTrace = debug_backtrace();
-        $file = $backTrace[1]['file'];
-        $line = $backTrace[1]['line'];
-        Warning( "Unknown function call Monitor->$fn from $file:$line" );
+        foreach ($row as $k => $v) {
+          $this->{$k} = $v;
+        }
       }
+      return $this->{$fn};
+    } else {
+      $backTrace = debug_backtrace();
+      $file = $backTrace[1]['file'];
+      $line = $backTrace[1]['line'];
+      Warning( "Unknown function call Monitor->$fn from $file:$line" );
     }
   }
 
@@ -306,7 +322,7 @@ private $control_fields = array(
       $args['rand'] = time();
     }
 
-    $streamSrc .= '?'.http_build_query($args,'', $querySep);
+    $streamSrc .= '?'.http_build_query($args, '', $querySep);
 
     return $streamSrc;
   } // end function getStreamSrc
@@ -331,6 +347,20 @@ private $control_fields = array(
     return $this->defaults{$field};
   } // end function Height
 
+  public function SignalCheckColour($new=null) {
+    $field = 'SignalCheckColour';
+    if ($new) {
+      $this->{$field} = $new;
+    }
+
+    // Validate that it's a valid colour (we seem to allow color names, not just hex).
+    // This also helps prevent XSS.
+    if (array_key_exists($field, $this) && preg_match('/^[#0-9a-zA-Z]+$/', $this->{$field})) {
+      return $this->{$field};
+    }
+    return $this->defaults{$field};
+  } // end function SignalCheckColour
+
   public function set($data) {
     foreach ($data as $k => $v) {
       if ( method_exists($this, $k) ) {
@@ -344,6 +374,8 @@ private $control_fields = array(
         } else if ( is_integer( $v ) ) {
           $this->{$k} = $v;
         } else if ( is_bool( $v ) ) {
+          $this->{$k} = $v;
+        } else if ( is_null( $v ) ) {
           $this->{$k} = $v;
         } else {
           Error( "Unknown type $k => $v of var " . gettype( $v ) );
@@ -451,7 +483,7 @@ private $control_fields = array(
     } else if ( $this->ServerId() ) {
       $Server = $this->Server();
 
-      $url = $Server->UrlToApi().'/monitors/'.$this->{'Id'}.'.json';
+      $url = $Server->UrlToApi().'/monitors/daemonControl/'.$this->{'Id'}.'/'.$mode.'/zmc.json';
       if ( ZM_OPT_USE_AUTH ) {
         if ( ZM_AUTH_RELAY == 'hashed' ) {
           $url .= '?auth='.generateAuthHash( ZM_AUTH_HASH_IPS );
@@ -463,17 +495,8 @@ private $control_fields = array(
         }
       }
       Logger::Debug("sending command to $url");
-      $data = array('Monitor[Function]' => $this->{'Function'} );
 
-      // use key 'http' even if you send the request to https://...
-      $options = array(
-          'http' => array(
-            'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
-            'method'  => 'POST',
-            'content' => http_build_query($data)
-            )
-          );
-      $context  = stream_context_create($options);
+      $context  = stream_context_create();
       try {
         $result = file_get_contents($url, false, $context);
         if ($result === FALSE) { /* Handle error */ 
@@ -509,6 +532,33 @@ private $control_fields = array(
           daemonControl( 'reload', 'zma', '-m '.$this->{'Id'} );
         }
       }
+    } else if ( $this->ServerId() ) {
+      $Server = $this->Server();
+
+      $url = ZM_BASE_PROTOCOL . '://'.$Server->Hostname().'/zm/api/monitors/daemonControl/'.$this->{'Id'}.'/'.$mode.'/zma.json';
+      if ( ZM_OPT_USE_AUTH ) {
+        if ( ZM_AUTH_RELAY == 'hashed' ) {
+          $url .= '?auth='.generateAuthHash( ZM_AUTH_HASH_IPS );
+        } elseif ( ZM_AUTH_RELAY == 'plain' ) {
+          $url = '?user='.$_SESSION['username'];
+          $url = '?pass='.$_SESSION['password'];
+        } elseif ( ZM_AUTH_RELAY == 'none' ) {
+          $url = '?user='.$_SESSION['username'];
+        }
+      }
+      Logger::Debug("sending command to $url");
+
+      $context  = stream_context_create();
+      try {
+        $result = file_get_contents($url, false, $context);
+        if ($result === FALSE) { /* Handle error */
+          Error("Error restarting zma using $url");
+        }
+      } catch ( Exception $e ) {
+        Error("Except $e thrown trying to restart zma");
+      }
+    } else {
+      Error("Server not assigned to Monitor in a multi-server setup. Please assign a server to the Monitor.");
     } // end if we are on the recording server
   } // end public function zmaControl
 
@@ -619,7 +669,8 @@ private $control_fields = array(
   } // end function Source
 
   public function UrlToIndex() {
-    return $this->Server()->UrlToIndex(ZM_MIN_STREAMING_PORT ? (ZM_MIN_STREAMING_PORT+$this->Id()) : null);
+    return $this->Server()->UrlToIndex();
+    //ZM_MIN_STREAMING_PORT ? (ZM_MIN_STREAMING_PORT+$this->Id()) : null);
   }
 
 } // end class Monitor

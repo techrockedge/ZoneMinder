@@ -29,6 +29,7 @@ $tabs = array();
 $tabs['skins'] = translate('Display');
 $tabs['system'] = translate('System');
 $tabs['config'] = translate('Config');
+$tabs['API'] = translate('API');
 $tabs['servers'] = translate('Servers');
 $tabs['storage'] = translate('Storage');
 $tabs['web'] = translate('Web');
@@ -70,7 +71,11 @@ if ( $tab == 'skins' ) {
     $reload = true;
   }
   if ( $reload )
-    echo "<script nonce=\"$cspNonce\">if(window.opener){window.opener.location.reload();}window.location.href=\"{$_SERVER['PHP_SELF']}?view={$view}&tab={$tab}\"</script>";
+    echo "<script nonce=\"$cspNonce\">if (window.opener) {
+window.opener.location.reload();
+}
+window.location.href=\"?view={$view}&tab={$tab}\";
+</script>";
 } # end if tab == skins
 
 ?>
@@ -95,7 +100,7 @@ foreach ( $tabs as $name=>$value ) {
 <?php 
 if ( $tab == 'skins' ) {
 ?>
-          <form name="optionsForm" class="form-horizontal" method="get" action="<?php echo $_SERVER['PHP_SELF'] ?>">
+          <form name="optionsForm" class="form-horizontal" method="get" action="?">
             <input type="hidden" name="view" value="<?php echo $view ?>"/>
             <input type="hidden" name="tab" value="<?php echo $tab ?>"/>
             <div class="form-group">
@@ -129,10 +134,11 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
             </div>
          </form>
 	
-      <?php
+
+<?php
 } else if ( $tab == 'users' ) {
 ?>
-      <form name="userForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] ?>">
+      <form name="userForm" method="post" action="?">
         <input type="hidden" name="view" value="<?php echo $view ?>"/>
         <input type="hidden" name="tab" value="<?php echo $tab ?>"/>
         <input type="hidden" name="action" value="delete"/>
@@ -150,6 +156,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
               <th class="colSystem"><?php echo translate('System') ?></th>
               <th class="colBandwidth"><?php echo translate('Bandwidth') ?></th>
               <th class="colMonitor"><?php echo translate('Monitor') ?></th>
+              <?php if ( ZM_OPT_USE_API ) { ?><th class="colAPIEnabled"><?php echo translate('APIEnabled') ?></th><?php } ?>
               <th class="colMark"><?php echo translate('Mark') ?></th>
             </tr>
           </thead>
@@ -185,6 +192,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
               <td class="colSystem"><?php echo validHtmlStr($row['System']) ?></td>
               <td class="colBandwidth"><?php echo $row['MaxBandwidth']?$bandwidth_options[$row['MaxBandwidth']]:'&nbsp;' ?></td>
               <td class="colMonitor"><?php echo $row['MonitorIds']?(join( ", ", $userMonitors )):"&nbsp;" ?></td>
+              <?php if ( ZM_OPT_USE_API ) { ?><td class="colAPIEnabled"><?php echo $row['APIEnabled']?translate('Yes'):translate('No') ?></td><?php } ?>
               <td class="colMark"><input type="checkbox" name="markUids[]" value="<?php echo $row['Id'] ?>" data-on-click-this="configureDeleteButton"<?php if ( !$canEdit ) { ?> disabled="disabled"<?php } ?>/></td>
             </tr>
 <?php
@@ -199,7 +207,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
       </form>
 <?php
 } else if ( $tab == 'servers' ) { ?>
-      <form name="serversForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] ?>">
+      <form name="serversForm" method="post" action="?">
         <input type="hidden" name="view" value="<?php echo $view ?>"/>
         <input type="hidden" name="tab" value="<?php echo $tab ?>"/>
         <input type="hidden" name="action" value="delete"/>
@@ -220,13 +228,14 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
               <th class="colStats"><?php echo translate('RunStats') ?></th>
               <th class="colAudit"><?php echo translate('RunAudit') ?></th>
               <th class="colTrigger"><?php echo translate('RunTrigger') ?></th>
+              <th class="colEventNotification"><?php echo translate('RunEventNotification') ?></th>
               <th class="colMark"><?php echo translate('Mark') ?></th>
 			</tr>
           </thead>
           <tbody>
 <?php
   $monitor_counts = dbFetchAssoc('SELECT Id,(SELECT COUNT(Id) FROM Monitors WHERE ServerId=Servers.Id) AS MonitorCount FROM Servers', 'Id', 'MonitorCount');
-  foreach ( Server::find() as $Server ) {
+  foreach ( ZM\Server::find() as $Server ) {
 ?>
             <tr>
               <td class="colName"><?php echo makePopupLink('?view=server&amp;id='.$Server->Id(), 'zmServer', 'server', validHtmlStr($Server->Name()), $canEdit) ?></td>
@@ -242,7 +251,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
               <td class="colCpuLoad <?php if ( $Server->CpuLoad() > 5 ) { echo 'danger'; } ?>">
                   <?php echo makePopupLink('?view=server&amp;id='.$Server->Id(), 'zmServer', 'server',$Server->CpuLoad(), $canEdit) ?>
               </td>
-              <td class="colMemory <?php if ( $Server->FreeMem()/$Server->TotalMem() < .1 ) { echo 'danger'; } ?>">
+              <td class="colMemory <?php if ( (!$Server->TotalMem()) or ($Server->FreeMem()/$Server->TotalMem() < .1) ) { echo 'danger'; } ?>">
                   <?php echo makePopupLink('?view=server&amp;id='.$Server->Id(), 'zmServer', 'server', human_filesize($Server->FreeMem()) . ' / ' . human_filesize($Server->TotalMem()), $canEdit) ?>
               </td>
               <td class="colSwap <?php if ( (!$Server->TotalSwap()) or ($Server->FreeSwap()/$Server->TotalSwap() < .1) ) { echo 'danger'; } ?>">
@@ -251,6 +260,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
               <td class="colStats"><?php echo makePopupLink('?view=server&amp;id='.$Server->Id(), 'zmServer', 'server', $Server->zmstats() ? 'yes' : 'no', $canEdit) ?></td>
               <td class="colAudit"><?php echo makePopupLink('?view=server&amp;id='.$Server->Id(), 'zmServer', 'server', $Server->zmaudit() ? 'yes' : 'no', $canEdit) ?></td>
               <td class="colTrigger"><?php echo makePopupLink('?view=server&amp;id='.$Server->Id(), 'zmServer', 'server', $Server->zmtrigger() ? 'yes' : 'no', $canEdit) ?></td>
+              <td class="colEventNotification"><?php echo makePopupLink('?view=server&amp;id='.$Server->Id(), 'zmServer', 'server', $Server->zmeventnotification() ? 'yes' : 'no', $canEdit) ?></td>
 
               <td class="colMark"><input type="checkbox" name="markIds[]" value="<?php echo $Server->Id() ?>" data-on-click-this="configureDeleteButton"<?php if ( !$canEdit ) { ?> disabled="disabled"<?php } ?>/></td>
 			</tr>
@@ -264,7 +274,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
       </form>
 <?php
 } else if ( $tab == 'storage' ) { ?>
-      <form name="storageForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] ?>">
+      <form name="storageForm" method="post" action="?">
         <input type="hidden" name="view" value="<?php echo $view ?>"/>
         <input type="hidden" name="tab" value="<?php echo $tab ?>"/>
         <input type="hidden" name="action" value="delete"/>
@@ -283,7 +293,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
             </tr>
           </thead>
           <tbody>
-<?php foreach( Storage::find( null, array('order'=>'lower(Name)') ) as $Storage ) { ?>
+<?php foreach( ZM\Storage::find( null, array('order'=>'lower(Name)') ) as $Storage ) { ?>
             <tr>
               <td class="colId"><?php echo makePopupLink('?view=storage&amp;id='.$Storage->Id(), 'zmStorage', 'storage', validHtmlStr($Storage->Id()), $canEdit ) ?></td>
               <td class="colName"><?php echo makePopupLink('?view=storage&amp;id='.$Storage->Id(), 'zmStorage', 'storage', validHtmlStr($Storage->Name()), $canEdit ) ?></td>
@@ -291,7 +301,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
               <td class="colType"><?php echo makePopupLink('?view=storage&amp;id='.$Storage->Id(), 'zmStorage', 'storage', validHtmlStr($Storage->Type()), $canEdit ) ?></td>
               <td class="colScheme"><?php echo makePopupLink('?view=storage&amp;id='.$Storage->Id(), 'zmStorage', 'storage', validHtmlStr($Storage->Scheme()), $canEdit ) ?></td>
               <td class="colServer"><?php
-              echo makePopupLink('?view=storage&amp;id='.$Storage->Id(), 'zmStorage', 'storage', validHtmlStr($Storage->Name()), $canEdit ) ?></td>
+              echo makePopupLink('?view=storage&amp;id='.$Storage->Id(), 'zmStorage', 'storage', validHtmlStr($Storage->Server()->Name()), $canEdit ) ?></td>
               <td class="colDiskSpace"><?php echo human_filesize($Storage->disk_used_space()) . ' of ' . human_filesize($Storage->disk_total_space()) ?></td>
               <td class="colMark"><input type="checkbox" name="markIds[]" value="<?php echo $Storage->Id() ?>" data-on-click-this="configureDeleteButton"<?php if ( !$canEdit ) { ?> disabled="disabled"<?php } ?>/></td>
             </tr>
@@ -303,8 +313,87 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
           <button type="submit" class="btn-danger" name="deleteBtn" value="Delete" disabled="disabled"><?php echo translate('Delete') ?></button>
         </div>
       </form>
-<?php
-} else {
+
+  <?php
+  } else if ($tab == 'API') {
+  
+    $apiEnabled = dbFetchOne("SELECT Value FROM Config WHERE Name='ZM_OPT_USE_API'");
+    if ($apiEnabled['Value']!='1') {
+      echo "<div class='errorText'>APIs are disabled. To enable, please turn on OPT_USE_API in Options->System</div>";
+    }
+    else {
+  ?>
+
+    <form name="userForm" method="post" action="?">
+      <button class="pull-left" type="submit" name="updateSelected" id="updateSelected"><?php echo translate("Update")?> </button><button class="btn-danger pull-right" type="submit" name="revokeAllTokens" id="revokeAllTokens"> <?php echo translate("RevokeAllTokens")?></button><br/>
+      
+      <?php
+      function revokeAllTokens()
+      {
+        $minTokenTime = time();
+        dbQuery ('UPDATE Users SET TokenMinExpiry=?', array ($minTokenTime));
+        echo "<span class='timedSuccessBox'>".translate('AllTokensRevoked')."</span>";
+      }
+
+      function updateSelected()
+      {
+        dbQuery("UPDATE Users SET APIEnabled=0");
+        foreach( $_REQUEST["tokenUids"] as $markUid ) {
+          $minTime = time();
+          dbQuery('UPDATE Users SET TokenMinExpiry=? WHERE Id=?', array($minTime, $markUid));
+        }
+        foreach( $_REQUEST["apiUids"] as $markUid ) {
+          dbQuery('UPDATE Users SET APIEnabled=1 WHERE Id=?', array($markUid));
+      
+        }
+        echo "<span class='timedSuccessBox'>".translate('Updated')."</span>";
+      }
+
+      if(array_key_exists('revokeAllTokens',$_POST)){
+        revokeAllTokens();
+      }
+
+      if(array_key_exists('updateSelected',$_POST)){
+        updateSelected();
+      }
+    ?>
+      
+      
+      <br/><br/>
+      <input type="hidden" name="view" value="<?php echo $view ?>"/>
+      <input type="hidden" name="tab" value="<?php echo $tab ?>"/>
+      <input type="hidden" name="action" value="delete"/>
+      <table id="contentTable" class="table table-striped">
+        <thead class="thead-highlight">
+          <tr>
+            <th class="colUsername"><?php echo translate('Username') ?></th>
+            <th class="colMark"><?php echo translate('Revoke Token') ?></th>
+            <th class="colMark"><?php echo translate('API Enabled') ?></th>
+          </tr>
+        </thead>
+        <tbody>
+        <?php
+          
+            $sql = 'SELECT * FROM Users ORDER BY Username';
+            foreach( dbFetchAll($sql) as $row ) {
+        ?>
+                <tr>
+                  <td class="colUsername"><?php echo validHtmlStr($row['Username']) ?></td>
+                  <td class="colMark"><input type="checkbox" name="tokenUids[]" value="<?php echo $row['Id'] ?>" /></td>
+                  <td class="colMark"><input type="checkbox" name="apiUids[]" value="<?php echo $row['Id']?>"  <?php echo $row['APIEnabled']?'checked':''?> /></td>
+                </tr>
+    <?php
+        }
+    ?>
+          </tbody>
+        </table>
+      </form>
+
+
+<?php 
+    } // API enabled
+  }  // $tab == API
+  else { 
     $config = array();
     $configCat = array();
     $configCats = array();
@@ -328,7 +417,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
         $configCats[$tab]['ZM_BANDWIDTH_DEFAULT']['Hint'] = $bandwidth_options;
     }
 ?>
-      <form name="optionsForm" class="form-horizontal" method="post" action="<?php echo $_SERVER['PHP_SELF'] ?>">
+      <form name="optionsForm" class="form-horizontal" method="post" action="?">
         <input type="hidden" name="view" value="<?php echo $view ?>"/>
         <input type="hidden" name="tab" value="<?php echo $tab ?>"/>
         <input type="hidden" name="action" value="options"/>
@@ -347,18 +436,18 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
               <input type="checkbox" id="<?php echo $name ?>" name="newConfig[<?php echo $name ?>]" value="1"<?php if ( $value['Value'] ) { ?> checked="checked"<?php } ?><?php echo $canEdit?'':' disabled="disabled"' ?>/>
 <?php
         } elseif ( is_array( $value['Hint'] ) ) {
-          echo htmlSelect( "newConfig[$name]", $value['Hint'], $value['Value'] );
-        } elseif ( preg_match( '/\|/', $value['Hint'] ) ) {
+          echo htmlSelect("newConfig[$name]", $value['Hint'], $value['Value']);
+        } elseif ( preg_match('/\|/', $value['Hint']) ) {
 ?>
 
 <?php
-            $options = explode( '|', $value['Hint'] );
-            if ( count( $options ) > 3 ) {
+            $options = explode('|', $value['Hint']);
+            if ( count($options) > 3 ) {
 ?>
                 <select class="form-control" name="newConfig[<?php echo $name ?>]"<?php echo $canEdit?'':' disabled="disabled"' ?>>
 <?php
                 foreach ( $options as $option ) {
-                  if ( preg_match( '/^([^=]+)=(.+)$/', $option, $matches ) ) {
+                  if ( preg_match('/^([^=]+)=(.+)$/', $option, $matches) ) {
                     $optionLabel = $matches[1];
                     $optionValue = $matches[2];
                   } else {
@@ -373,7 +462,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
 <?php
             } else {
                 foreach ( $options as $option ) {
-                  if ( preg_match( '/^([^=]+)=(.+)$/', $option ) ) {
+                  if ( preg_match('/^([^=]+)=(.+)$/', $option) ) {
                     $optionLabel = $matches[1];
                     $optionValue = $matches[2];
                   } else {
@@ -381,7 +470,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
                   }
 ?>
                 <label>
-                  <input type="radio" id="<?php echo $name.'_'.preg_replace( '/[^a-zA-Z0-9]/', '', $optionValue ) ?>" name="newConfig[<?php echo $name ?>]" value="<?php echo $optionValue ?>"<?php if ( $value['Value'] == $optionValue ) { ?> checked="checked"<?php } ?><?php echo $canEdit?'':' disabled="disabled"' ?>/>
+                  <input type="radio" id="<?php echo $name.'_'.preg_replace('/[^a-zA-Z0-9]/', '', $optionValue) ?>" name="newConfig[<?php echo $name ?>]" value="<?php echo $optionValue ?>"<?php if ( $value['Value'] == $optionValue ) { ?> checked="checked"<?php } ?><?php echo $canEdit?'':' disabled="disabled"' ?>/>
                   <?php echo htmlspecialchars($optionLabel) ?>
                 </label>
 <?php
@@ -417,6 +506,7 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
 <?php
     }
 ?>
+
         <div id="contentButtons">
           <button type="submit" value="Save"<?php echo $canEdit?'':' disabled="disabled"' ?>><?php echo translate('Save') ?></button>
         </div>
@@ -424,6 +514,8 @@ foreach ( array_map('basename', glob('skins/'.$current_skin.'/css/*',GLOB_ONLYDI
 <?php
 }
 ?>
+
+
 
     </div><!-- end #options -->
 	</div>

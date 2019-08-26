@@ -37,7 +37,7 @@ if ( ! visibleMonitor($mid) ) {
   return;
 }
 
-$monitor = new Monitor($mid);
+$monitor = new ZM\Monitor($mid);
 
 #Whether to show the controls button
 $showPtzControls = ( ZM_OPT_CONTROL && $monitor->Controllable() && canView('Control') && $monitor->Type() != 'WebSite' );
@@ -73,12 +73,25 @@ if ( canView('Control') && $monitor->Type() == 'Local' ) {
 <?php
 }
 ?>
-          <div id="scaleControl"><?php echo translate('Scale') ?>: <?php echo buildSelect( "scale", $scales, "changeScale( this );" ); ?></div>
+          <div id="scaleControl"><?php echo translate('Scale') ?>: <?php echo buildSelect('scale', $scales, 'changeScale(this);'); ?></div>
         </div>
         <div id="closeControl"><a href="#" onclick="<?php echo $popup ? 'window.close()' : 'history.go(-1);return false;' ?>"><?php echo $popup ? translate('Close') : translate('Back') ?></a></div>
     </div>
+<?php
+if ( $monitor->Status() != 'Connected' ) {
+  echo '<div class="warning">Monitor is not capturing. We will be unable to provide an image</div>';
+}
+?>
     <div id="content">
-      <div id="imageFeed"><?php echo getStreamHTML( $monitor, array('scale'=>$scale) ); ?></div>
+      <div id="imageFeed"
+<?php
+if ( $streamMode == 'jpeg' ) {
+  echo 'title="Click to zoom, shift click to pan, ctrl click to zoom out"';
+}
+?>
+><?php echo getStreamHTML( $monitor, array('scale'=>$scale) ); ?></div>
+
+
 <?php if ( $monitor->Type() != 'WebSite' ) { ?>
       <div id="monitorStatus">
 <?php if ( canEdit('Monitors') ) { ?>
@@ -145,10 +158,10 @@ if ( $showPtzControls ) {
       </div>
 <?php
 }
-if ( canView( 'Events' ) && $monitor->Type() != 'WebSite' ) {
+if ( canView('Events') && ($monitor->Type() != 'WebSite') ) {
 ?>
       <div id="events">
-        <table id="eventList" cellspacing="0">
+        <table id="eventList">
           <thead>
             <tr>
               <th class="colId"><?php echo translate('Id') ?></th>

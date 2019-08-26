@@ -1,3 +1,7 @@
+function selectFilter(element) {
+  element.form.submit();
+}
+
 function validateForm( form ) {
   var rows = $j(form).find('tbody').eq(0).find('tr');
   var obrCount = 0;
@@ -21,7 +25,6 @@ function validateForm( form ) {
     alert("There appear to be non-numeric characters in your limit. Limit must be a positive integer value or empty.");
     return false;
   }
-  console.log("Success validating");
   return true;
 }
 
@@ -60,6 +63,24 @@ function updateButtons(element) {
   }
 }
 
+function click_automove(element) {
+  updateButtons(this);
+  if ( this.checked ) {
+    $j(this.form.elements['filter[AutoMoveTo]']).css('display', 'inline');
+  } else {
+    this.form.elements['filter[AutoMoveTo]'].hide();
+  }
+}
+
+function click_autocopy(element) {
+  updateButtons(this);
+  if ( this.checked ) {
+    $j(this.form.elements['filter[AutoCopyTo]']).css('display', 'inline');
+  } else {
+    this.form.elements['filter[AutoCopyTo]'].hide();
+  }
+}
+
 function checkValue( element ) {
   var rows = $j(element).closest('tbody').children();
   parseRows(rows);
@@ -80,6 +101,17 @@ function submitToEvents( element ) {
   form.action = thisUrl + '?view=events';
   history.replaceState(null, null, '?view=filter&' + $j(form).serialize());
 }
+function submitToMontageReview( element ) {
+  var form = element.form;
+  form.action = thisUrl + '?view=montagereview';
+  history.replaceState(null, null, '?view=filter&' + $j(form).serialize());
+}
+
+function submitToExport(element) {
+  var form = element.form;
+  window.location.assign('?view=export&'+$j(form).serialize());
+  //createPopup('?view=export&filter_id='+form.elements['Id'].value, 'zmExport', 'export' );
+}
 
 function executeFilter( element ) {
   var form = element.form;
@@ -94,12 +126,13 @@ function saveFilter( element ) {
   form.target = window.name;
   form.elements['action'].value = element.value;
   form.action = thisUrl + '?view=filter';
-  form.submit();
+  //form.submit();
+  // Submit is done by the button type="submit"
 }
 
-function deleteFilter( element, name ) {
-  if ( confirm( deleteSavedFilterString+" '"+name+"'?" ) ) {
-    var form = element.form;
+function deleteFilter( element ) {
+  var form = element.form;
+  if ( confirm( deleteSavedFilterString+" '"+form.elements['filter[Name]'].value+"'?" ) ) {
     form.elements['action'].value = 'delete';
     form.submit();
   }
@@ -176,10 +209,10 @@ function parseRows(rows) {
       }
       var serverVal = inputTds.eq(4).children().val();
       inputTds.eq(4).html(serverSelect).children().val(serverVal).chosen({width: "101%"});
-    } else if ( attr == 'StorageId' ) { //Choose by storagearea
+    } else if ( (attr == 'StorageId') || (attr == 'SecondaryStorageId') ) { //Choose by storagearea
       var storageSelect = $j('<select></select>').attr('name', queryPrefix + rowNum + '][val]').attr('id', queryPrefix + rowNum + '][val]');
       for ( key in storageareas ) {
-        storageSelect.append('<option value="' + key + '">' + storageareas[key] + '</option>');
+        storageSelect.append('<option value="' + key + '">' + storageareas[key].Name + '</option>');
       }
       var storageVal = inputTds.eq(4).children().val();
       inputTds.eq(4).html(storageSelect).children().val(storageVal).chosen({width: "101%"});
@@ -237,6 +270,11 @@ function addTerm( element ) {
     this[0].selected = 'selected';
   }).chosen({width: '101%'});
   newRow.find('input[type="text"]').val('');
+  newRow[0].querySelectorAll("button[data-on-click-this]").forEach(function attachOnClick(el) {
+    var fnName = el.getAttribute("data-on-click-this");
+    el.onclick = window[fnName].bind(el, el);
+  });
+
   var rows = $j(row).parent().children();
   parseRows(rows);
 }

@@ -199,6 +199,7 @@ extern "C" {
 
 /* A single function to initialize ffmpeg, to avoid multiple initializations */		
 void FFMPEGInit();
+void FFMPEGDeInit();
 
 #if HAVE_LIBAVUTIL
 enum _AVPIXELFORMAT GetFFMPEGPixelFormat(unsigned int p_colours, unsigned p_subpixelorder);
@@ -294,10 +295,49 @@ static av_always_inline av_const int64_t av_clip64_c(int64_t a, int64_t amin, in
 #endif
 
 void zm_dump_stream_format(AVFormatContext *ic, int i, int index, int is_output);
-void zm_dump_codec ( const AVCodecContext *codec );
+void zm_dump_codec(const AVCodecContext *codec);
 #if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
-void zm_dump_codecpar ( const AVCodecParameters *par );
+void zm_dump_codecpar(const AVCodecParameters *par);
 #endif
+#if LIBAVCODEC_VERSION_CHECK(56, 8, 0, 60, 100)
+#define zm_dump_frame(frame, text) Debug(1, "%s: format %d %s sample_rate %" PRIu32 " nb_samples %d channels %d" \
+      " duration %" PRId64 \
+      " layout %d pts %" PRId64,\
+      text, \
+      frame->format, \
+      av_get_sample_fmt_name((AVSampleFormat)frame->format), \
+      frame->sample_rate, \
+      frame->nb_samples, \
+      frame->channels, \
+      frame->pkt_duration, \
+      frame->channel_layout, \
+      frame->pts \
+      );
+#else
+#define zm_dump_frame(frame, text) Debug(1, "%s: format %d %s sample_rate %" PRIu32 " nb_samples %d channels %d" \
+      " duration %" PRId64 \
+      " layout %d pts %" PRId64, \
+      text, \
+      frame->format, \
+      av_get_sample_fmt_name((AVSampleFormat)frame->format), \
+      frame->sample_rate, \
+      frame->nb_samples, \
+      0, 0, \
+      frame->channel_layout, \
+      frame->pts \
+      );
+
+#endif
+
+#define zm_dump_video_frame(frame,text) Debug(1, "%s: format %d %s %dx%d linesize:%dx%d pts: %" PRId64, \
+      text, \
+      frame->format, \
+      av_get_pix_fmt_name((AVPixelFormat)frame->format), \
+      frame->width, \
+      frame->height, \
+      frame->linesize[0], frame->linesize[1], \
+      frame->pts \
+      );
 
 #if LIBAVCODEC_VERSION_CHECK(56, 8, 0, 60, 100)
     #define zm_av_packet_unref( packet ) av_packet_unref( packet )
@@ -324,8 +364,14 @@ void zm_dump_codecpar ( const AVCodecParameters *par );
 
 int check_sample_fmt(AVCodec *codec, enum AVSampleFormat sample_fmt);
 
-bool is_video_stream( AVStream * stream );
-bool is_audio_stream( AVStream * stream );
-int zm_receive_frame( AVCodecContext *context, AVFrame *frame, AVPacket &packet );
-void dumpPacket(AVPacket *,const char *text="DEBUG");
+bool is_video_stream(AVStream *);
+bool is_audio_stream(AVStream *);
+bool is_video_context(AVCodec *);
+bool is_audio_context(AVCodec *);
+
+int zm_receive_frame(AVCodecContext *context, AVFrame *frame, AVPacket &packet);
+int zm_send_frame(AVCodecContext *context, AVFrame *frame, AVPacket &packet);
+
+void dumpPacket(AVStream *, AVPacket *,const char *text="");
+void dumpPacket(AVPacket *,const char *text="");
 #endif // ZM_FFMPEG_H

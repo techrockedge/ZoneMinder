@@ -25,6 +25,15 @@ var sortReversed = false;
 var filterFields = ['Component', 'ServerId', 'Pid', 'Level', 'File', 'Line'];
 var options = {};
 
+function escapeHtml(unsafe) {
+  return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+}
+
 function buildFetchParms( parms ) {
   var fetchParms = logParms+'&limit='+maxLogFetch;
   if ( parms ) {
@@ -64,7 +73,14 @@ function logResponse( respObj ) {
               if ( ( !minLogTime ) || ( log.TimeKey < minLogTime ) ) {
                 minLogTime = log.TimeKey;
               }
-              var row = logTable.push( [{content: log.DateTime, properties: {style: 'white-space: nowrap'}}, log.Component, log.Server, log.Pid, log.Code, log.Message, log.File, log.Line] );
+
+              var row = logTable.push([
+                {content: log.DateTime, properties: {style: 'white-space: nowrap'}},
+                log.Component, log.Server, log.Pid, log.Code,
+                escapeHtml(log.Message),
+                escapeHtml(log.File),
+                log.Line
+              ]);
 
               delete log.Message;
               row.tr.store( 'log', log );

@@ -36,6 +36,7 @@ public:
 
 protected:
   static const int MAX_STREAM_DELAY = 5; // Seconds
+  static const int MAX_SLEEP_USEC = 500000; // .5 Seconds
 
   static const StreamType DEFAULT_TYPE = STREAM_JPEG;
   enum { DEFAULT_RATE=ZM_RATE_BASE };
@@ -160,6 +161,7 @@ public:
       scale = DEFAULT_SCALE;
   }
   void setStreamReplayRate( int p_rate ) {
+    Debug(2,"Setting replay_rate %d", p_rate);
     replay_rate = p_rate;
   }
   void setStreamMaxFPS( double p_maxfps ) {

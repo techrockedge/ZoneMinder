@@ -57,9 +57,9 @@ static void subtractTime( struct timeval * const tp1, struct timeval * const tp2
 
 void Logger::usrHandler( int sig ) {
   Logger *logger = fetch();
-  if ( sig == SIGUSR1 ) {
+  if ( sig == SIGUSR1 )
     logger->level(logger->level()+1);
-  } else if ( sig == SIGUSR2 )
+  else if ( sig == SIGUSR2 )
     logger->level(logger->level()-1);
   Info("Logger - Level changed to %d", logger->level());
 }
@@ -252,8 +252,6 @@ void Logger::initialise(const std::string &id, const Options &options) {
 }
 
 void Logger::terminate() {
-  Debug(1, "Terminating Logger");
-
   if ( mFileLevel > NOLOG )
     closeFile();
 
@@ -574,6 +572,7 @@ void Logger::logPrint( bool hex, const char * const filepath, const int line, co
 
   free(filecopy);
   if ( level <= FATAL ) {
+    log_mutex.unlock();
     logTerm();
     zmDbClose();
     if ( level <= PANIC )

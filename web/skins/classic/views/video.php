@@ -46,7 +46,7 @@ if ( isset($_REQUEST['scale']) )
 else
   $scale = reScale(SCALE_BASE, $event['DefaultScale'], ZM_WEB_DEFAULT_SCALE);
 
-$Event = new Event($event['Id']);
+$Event = new ZM\Event($event['Id']);
 $eventPath = $Event->Path();
 
 $videoFormats = array();
@@ -123,7 +123,7 @@ if ( isset($_REQUEST['showIndex']) ) {
 <?php
 } else {
 ?>
-      <form name="contentForm" id="contentForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] ?>">
+      <form name="contentForm" id="contentForm" method="post" action="?">
         <input type="hidden" name="id" value="<?php echo $event['Id'] ?>"/>
         <table id="contentTable" class="minor">
           <tbody>

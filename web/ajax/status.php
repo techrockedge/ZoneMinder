@@ -193,7 +193,7 @@ function collectData() {
   $entitySpec = &$statusData[strtolower(validJsStr($_REQUEST['entity']))];
 #print_r( $entitySpec );
   if ( !canView( $entitySpec['permission'] ) )
-    ajaxError( 'Unrecognised action or insufficient permissions' );
+    ajaxError('Unrecognised action or insufficient permissions');
 
   if ( !empty($entitySpec['func']) ) {
     $data = eval( 'return( '.$entitySpec['func']." );" );
@@ -284,7 +284,7 @@ function collectData() {
             if ( in_array($matches[1], $fieldSql) ) {
               $sql .= $matches[1];
             } else {
-              Error('Sort field ' . $matches[1] . ' not in SQL Fields');
+              ZM\Error('Sort field ' . $matches[1] . ' not in SQL Fields');
             }
             if ( count($matches) > 2 ) {
               $sql .= ' '.strtoupper($matches[2]);
@@ -292,7 +292,7 @@ function collectData() {
                 $sql .= ' '.strtoupper($matches[3]);
             }
           } else {
-            Error("Sort field didn't match regexp $sort_field");
+            ZM\Error("Sort field didn't match regexp $sort_field");
           }
         } # end foreach sort field
       } # end if has sort
@@ -323,7 +323,7 @@ function collectData() {
       }
     }
   }
-  #Logger::Debug(print_r($data, true));
+  #ZM\Logger::Debug(print_r($data, true));
   return $data;
 }
 
@@ -398,9 +398,9 @@ function getNearEvents() {
   global $user, $sortColumn, $sortOrder;
 
   $eventId = $_REQUEST['id'];
-  $event = dbFetchOne( 'SELECT * FROM Events WHERE Id=?', NULL, array( $eventId ) );
+  $event = dbFetchOne('SELECT * FROM Events WHERE Id=?', NULL, array($eventId));
 
-  parseFilter( $_REQUEST['filter'] );
+  parseFilter($_REQUEST['filter']);
   parseSort();
 
   if ( $user['MonitorIds'] )
@@ -419,8 +419,8 @@ function getNearEvents() {
     $sql .= ', E.Id DESC';
   }
   $sql .= ' LIMIT 1';
-  $result = dbQuery( $sql );
-  $prevEvent = dbFetchNext( $result );
+  $result = dbQuery($sql);
+  $prevEvent = dbFetchNext($result);
 
   $sql = "SELECT E.Id AS Id, E.StartTime AS StartTime FROM Events AS E INNER JOIN Monitors AS M ON E.MonitorId = M.Id WHERE $sortColumn ".($sortOrder=='asc'?'>=':'<=')." '".$event[$_REQUEST['sort_field']]."'".$_REQUEST['filter']['sql'].$midSql.' AND E.Id>'.$event['Id'] . " ORDER BY $sortColumn $sortOrder";
   if ( $sortColumn != 'E.Id' ) {

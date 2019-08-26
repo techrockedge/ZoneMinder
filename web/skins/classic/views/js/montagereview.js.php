@@ -46,7 +46,7 @@ if ( !$liveMode ) {
 
   $EventsById = array();
 
-  while( $event = $result->fetch(PDO::FETCH_ASSOC) ) {
+  while ( $event = $result->fetch(PDO::FETCH_ASSOC) ) {
     $event_id = $event['Id'];
     $EventsById[$event_id] = $event;
   }
@@ -55,22 +55,25 @@ if ( !$liveMode ) {
 
   if ( $result = dbQuery($framesSql) ) {
     $next_frame = null;
-    while( $frame = $result->fetch(PDO::FETCH_ASSOC) ) {
+    while ( $frame = $result->fetch(PDO::FETCH_ASSOC) ) {
       $event_id = $frame['EventId'];
       $event = &$EventsById[$event_id];
 
       $frame['TimeStampSecs'] = $event['StartTimeSecs'] + $frame['Delta'];
       if ( !isset($event['FramesById']) ) {
+        // Please note that this is the last frame as we sort DESC
         $event['FramesById'] = array();
-        $frame['NextTimeStampSecs'] = 0;
+        $frame['NextTimeStampSecs'] = $event['EndTime'];
       } else {
         $frame['NextTimeStampSecs'] = $next_frames[$frame['EventId']]['TimeStampSecs'];
-        $frame['NextFrameId'] = $next_frames[$frame['EventId']]['FrameId'];
+        $frame['NextFrameId'] = $next_frames[$frame['EventId']]['Id'];
       }
-      $event['FramesById'] += array( $frame['Id']=>$frame );
+      $event['FramesById'] += array($frame['Id']=>$frame);
       $next_frames[$frame['EventId']] = $frame;
     }
   }
+
+  $events_by_monitor_id = array();
 
   echo "var events = {\n";
   foreach ( $EventsById as $event_id=>$event ) {
@@ -82,7 +85,7 @@ if ( !$liveMode ) {
     if ( !$minTimeSecs or $minTimeSecs > $StartTimeSecs ) $minTimeSecs = $StartTimeSecs;
     if ( !$maxTimeSecs or $maxTimeSecs < $EndTimeSecs ) $maxTimeSecs = $EndTimeSecs;
 
-    $event_json = json_encode($event, JSON_PRETTY_PRINT);
+    $event_json = json_encode($event, JSON_PRETTY_PRINT|JSON_NUMERIC_CHECK);
     echo " $event_id : $event_json,\n";
 
     $index = $index + 1;
@@ -91,8 +94,14 @@ if ( !$liveMode ) {
         $maxScore = $event['MaxScore'];
       $anyAlarms = true;
     }
-  }
-echo " };\n";
+    if ( !isset($events_by_monitor_id[$event['MonitorId']]) )
+        $events_by_monitor_id[$event['MonitorId']] = array();
+    array_push($events_by_monitor_id[$event['MonitorId']], $event_id);
+
+  } # end foreach Event
+  echo ' };
+
+  var events_by_monitor_id = '.json_encode($events_by_monitor_id, JSON_NUMERIC_CHECK)."\n";
 
   // if there is no data set the min/max to the passed in values
   if ( $index == 0 ) {
@@ -119,14 +128,22 @@ echo " };\n";
 } // end if initialmodeislive
 
 echo "\nvar Storage = [];\n";
-foreach ( Storage::find() as $Storage ) {
-  echo 'Storage[' . $Storage->Id() . '] = ' . json_encode($Storage). ";\n";
+$have_storage_zero = 0;
+foreach ( ZM\Storage::find() as $Storage ) {
+  echo 'Storage[' . $Storage->Id() . '] = ' . $Storage->to_json(). ";\n";
+  if ( $Storage->Id() == 0 )
+    $have_storage_zero = true;
 }
+if ( !$have_storage_zero ) {
+  $Storage = new ZM\Storage();
+  echo 'Storage[0] = ' . $Storage->to_json(). ";\n";
+}
+
 echo "\nvar Servers = [];\n";
 // Fall back to get Server paths, etc when no using multi-server mode
-$Server = new Server();
-echo 'Servers[0] = new Server(' . json_encode($Server). ");\n";
-foreach ( Server::find() as $Server ) {
+$Server = new ZM\Server();
+echo 'Servers[0] = new Server(' . $Server->to_json(). ");\n";
+foreach ( ZM\Server::find() as $Server ) {
   echo 'Servers[' . $Server->Id() . '] = new Server(' . $Server->to_json(). ");\n";
 }
 

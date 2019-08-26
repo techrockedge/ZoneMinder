@@ -53,7 +53,11 @@ function CSPHeaders($view, $nonce) {
     case 'controlcap':
     case 'cycle':
     case 'donate':
+    case 'download':
     case 'error':
+    case 'events':
+    case 'export':
+    case 'frame':
     case 'function':
     case 'log':
     case 'logout':
@@ -86,12 +90,12 @@ function CORSHeaders() {
 
 # The following is left for future reference/use.
     $valid = false;
-    $Servers = Server::find();
+    $Servers = ZM\Server::find();
     if ( sizeof($Servers) < 1 ) {
 # Only need CORSHeaders in the event that there are multiple servers in use.
       # ICON: Might not be true. multi-port?
       if ( ZM_MIN_STREAMING_PORT ) {
-        Logger::Debug("Setting default Access-Control-Allow-Origin from " . $_SERVER['HTTP_ORIGIN']);
+        ZM\Logger::Debug('Setting default Access-Control-Allow-Origin from ' . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Headers: x-requested-with,x-request');
       }
@@ -104,14 +108,14 @@ function CORSHeaders() {
         preg_match('/^(https?:\/\/)?'.preg_quote($Server->Name(),'/').'/i', $_SERVER['HTTP_ORIGIN'])
       ) {
         $valid = true;
-        Logger::Debug("Setting Access-Control-Allow-Origin from " . $_SERVER['HTTP_ORIGIN']);
+        ZM\Logger::Debug("Setting Access-Control-Allow-Origin from " . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Headers: x-requested-with,x-request');
         break;
       }
     }
     if ( !$valid ) {
-      Warning($_SERVER['HTTP_ORIGIN'] . ' is not found in servers list.');
+      ZM\Warning($_SERVER['HTTP_ORIGIN'] . ' is not found in servers list.');
     }
   }
 }
@@ -279,18 +283,18 @@ function outputImageStream( $id, $src, $width, $height, $title='' ) {
   echo getImageStreamHTML( $id, $src, $width, $height, $title );
 }
 
-
+// width and height MUST be valid and include the px
 function getImageStreamHTML( $id, $src, $width, $height, $title='' ) {
   if ( canStreamIframe() ) {
       return '<iframe id="'.$id.'" src="'.$src.'" alt="'. validHtmlStr($title) .'" '.($width? ' width="'. validInt($width).'"' : '').($height?' height="'.validInt($height).'"' : '' ).'/>';
   } else {
-      return '<img id="'.$id.'" src="'.$src.'" alt="'. validHtmlStr($title) .'" style="'.($width? ' width:'.$width.';' : '' ).($height ? ' height:'. $height.';' : '' ).'"/>';
+      return '<img id="'.$id.'" src="'.$src.'" alt="'. validHtmlStr($title) .'" style="'.($width? 'width:'.$width.';' : '' ).($height ? ' height:'. $height.';' : '' ).'"/>';
   }
 }
 
 function outputControlStream( $src, $width, $height, $monitor, $scale, $target ) {
 ?>
-  <form name="ctrlForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] ?>" target="<?php echo $target ?>">
+  <form name="ctrlForm" method="post" action="?" target="<?php echo $target ?>">
     <input type="hidden" name="view" value="blank">
     <input type="hidden" name="mid" value="<?php echo $monitor['Id'] ?>">
     <input type="hidden" name="action" value="control">
@@ -352,7 +356,7 @@ function getWebSiteUrl( $id, $src, $width, $height, $title='' ) {
         if (array_key_exists('X-Frame-Options', $header)) {
             $header = $header['X-Frame-Options'];
             if ( stripos($header, 'sameorigin') === 0 )
-                Warning("Web site $src has X-Frame-Options set to sameorigin. An X-Frame-Options browser plugin is required to display this site.");
+                ZM\Warning("Web site $src has X-Frame-Options set to sameorigin. An X-Frame-Options browser plugin is required to display this site.");
         }
     }
     return '<object id="'.$id.'" data="'.$src.'" alt="'.$title.'" width="'.$width.'" height="'.$height.'"></object>';
@@ -360,7 +364,7 @@ function getWebSiteUrl( $id, $src, $width, $height, $title='' ) {
 
 function outputControlStill( $src, $width, $height, $monitor, $scale, $target ) {
   ?>
-  <form name="ctrlForm" method="post" action="<?php echo $_SERVER['PHP_SELF'] ?>" target="<?php echo $target ?>">
+  <form name="ctrlForm" method="post" action="?" target="<?php echo $target ?>">
     <input type="hidden" name="view" value="blank">
     <input type="hidden" name="mid" value="<?php echo $monitor['Id'] ?>">
     <input type="hidden" name="action" value="control">
@@ -405,7 +409,7 @@ function getZmuCommand( $args ) {
 }
 
 function getEventDefaultVideoPath( $event ) {
-  $Event = new Event( $event );
+  $Event = new ZM\Event( $event );
   return $Event->getStreamSrc( array( 'mode'=>'mpeg', 'format'=>'h264' ) );
 }
 
@@ -420,15 +424,15 @@ function deletePath( $path ) {
 function deleteEvent( $event ) {
 
   if ( empty($event) ) {
-    Error( 'Empty event passed to deleteEvent.');
+    ZM\Error('Empty event passed to deleteEvent.');
     return;
   }
 
   if ( gettype($event) != 'array' ) {
 # $event could be an eid, so turn it into an event hash
-    $event = new Event( $event );
+    $event = new ZM\Event( $event );
   } else {
-Logger::Debug("Event type: " . gettype($event));
+ZM\Logger::Debug("Event type: " . gettype($event));
   }
 
   global $user;
@@ -494,7 +498,6 @@ function makePopupButton( $url, $winName, $winSize, $buttonValue, $condition=1, 
 }
 
 function htmlSelect( $name, $contents, $values, $behaviours=false ) {
-
   $behaviourText = '';
   if ( !empty($behaviours) ) {
     if ( is_array($behaviours) ) {
@@ -524,7 +527,7 @@ function htmlOptions($contents, $values) {
 
       if ( isset($option['disabled']) ) {
         $disabled = $option['disabled'];
-        Error("Setting to disabled");
+        ZM\Error("Setting to disabled");
       }
     } else if ( is_object($option) ) {
       $text = $option->Name();
@@ -532,10 +535,10 @@ function htmlOptions($contents, $values) {
       $text = $option;
     }
     $selected = is_array($values) ? in_array($value, $values) : !strcmp($value, $values);
-    $options_html .= "<option value=\"$value\"".
+    $options_html .= "<option value=\"".htmlspecialchars($value, ENT_COMPAT | ENT_HTML401, ini_get('default_charset'), false)."\"".
       ($selected?' selected="selected"':'').
       ($disabled?' disabled="disabled"':'').
-      ">$text</option>";
+      ">".htmlspecialchars($text, ENT_COMPAT | ENT_HTML401, ini_get('default_charset'), false)."</option>";
   }
   return $options_html;
 }
@@ -553,7 +556,7 @@ function buildSelect( $name, $contents, $behaviours=false ) {
     elseif ( isset($_REQUEST[$arr]) )
       $value = $_REQUEST[$arr];
     if ( !preg_match_all( '/\[\s*[\'"]?(\w+)["\']?\s*\]/', $matches[2], $matches ) ) {
-      Fatal( "Can't parse selector '$name'" );
+      ZM\Fatal( "Can't parse selector '$name'" );
     }
     for ( $i = 0; $i < count($matches[1]); $i++ ) {
       $idx = $matches[1][$i];
@@ -804,7 +807,7 @@ function canStreamNative() {
 
 function canStreamApplet() {
   if ( (ZM_OPT_CAMBOZOLA && !file_exists( ZM_PATH_WEB.'/'.ZM_PATH_CAMBOZOLA )) ) {
-    Warning ( 'ZM_OPT_CAMBOZOLA is enabled, but the system cannot find '.ZM_PATH_WEB.'/'.ZM_PATH_CAMBOZOLA );
+    ZM\Warning('ZM_OPT_CAMBOZOLA is enabled, but the system cannot find '.ZM_PATH_WEB.'/'.ZM_PATH_CAMBOZOLA);
   }
 
   return( (ZM_OPT_CAMBOZOLA && file_exists( ZM_PATH_WEB.'/'.ZM_PATH_CAMBOZOLA )) );
@@ -830,17 +833,17 @@ function daemonControl( $command, $daemon=false, $args=false ) {
   }
   $string = escapeshellcmd( $string );
   #$string .= ' 2>/dev/null >&- <&- >/dev/null';
-Logger::Debug("daemonControl $string");
-  exec( $string );
+ZM\Logger::Debug("daemonControl $string");
+  exec($string);
 }
 
 function zmcControl($monitor, $mode=false) {
-  $Monitor = new Monitor( $monitor );
+  $Monitor = new ZM\Monitor($monitor);
   return $Monitor->zmcControl($mode);
 }
 
 function zmaControl($monitor, $mode=false) {
-  $Monitor = new Monitor($monitor);
+  $Monitor = new ZM\Monitor($monitor);
   return $Monitor->zmaControl($mode);
 }
 
@@ -849,8 +852,8 @@ function initDaemonStatus() {
 
   if ( !isset($daemon_status) ) {
     if ( daemonCheck() ) {
-      $string = ZM_PATH_BIN."/zmdc.pl status";
-      $daemon_status = shell_exec( $string );
+      $string = ZM_PATH_BIN.'/zmdc.pl status';
+      $daemon_status = shell_exec($string);
     } else {
       $daemon_status = '';
     }
@@ -913,7 +916,7 @@ function zmaCheck( $monitor ) {
 }
 
 function getImageSrc( $event, $frame, $scale=SCALE_BASE, $captureOnly=false, $overwrite=false ) {
-  $Event = new Event( $event );
+  $Event = new ZM\Event( $event );
   return $Event->getImageSrc( $frame, $scale, $captureOnly, $overwrite );
 }
 
@@ -937,7 +940,7 @@ function createListThumbnail( $event, $overwrite=false ) {
     $scale = (SCALE_BASE*ZM_WEB_LIST_THUMB_HEIGHT)/$event['Height'];
     $thumbWidth = reScale( $event['Width'], $scale );
   } else {
-    Fatal( "No thumbnail width or height specified, please check in Options->Web" );
+    ZM\Fatal( "No thumbnail width or height specified, please check in Options->Web" );
   }
 
   $imageData = getImageSrc( $event, $frame, $scale, false, $overwrite );
@@ -1047,7 +1050,13 @@ function parseSort( $saveToSession=false, $querySep='&amp;' ) {
     case 'StartTime' :
       $sortColumn = 'E.StartTime';
       break;
+    case 'StartDateTime' :
+      $sortColumn = 'E.StartTime';
+      break;
     case 'EndTime' :
+      $sortColumn = 'E.EndTime';
+      break;
+    case 'EndDateTime' :
       $sortColumn = 'E.EndTime';
       break;
     case 'Length' :
@@ -1068,13 +1077,28 @@ function parseSort( $saveToSession=false, $querySep='&amp;' ) {
     case 'MaxScore' :
       $sortColumn = 'E.MaxScore';
       break;
+    case 'FramesFrameId' :
+      $sortColumn = 'F.FrameId';
+      break;
+    case 'FramesType' :
+      $sortColumn = 'F.Type';
+      break;
+    case 'FramesTimeStamp' :
+      $sortColumn = 'F.TimeStamp';
+      break;
+    case 'FramesDelta' :
+      $sortColumn = 'F.Delta';
+      break;
+    case 'FramesScore' :
+      $sortColumn = 'F.Score';
+      break;
     default:
       $sortColumn = 'E.StartTime';
       break;
   }
-  $sortOrder = $_REQUEST['sort_asc']?'asc':'desc';
   if ( !$_REQUEST['sort_asc'] )
     $_REQUEST['sort_asc'] = 0;
+  $sortOrder = $_REQUEST['sort_asc']?'asc':'desc';
   $sortQuery = $querySep.'sort_field='.validHtmlStr($_REQUEST['sort_field']).$querySep.'sort_asc='.validHtmlStr($_REQUEST['sort_asc']);
   if ( !isset($_REQUEST['limit']) )
     $_REQUEST['limit'] = '';
@@ -1083,7 +1107,7 @@ function parseSort( $saveToSession=false, $querySep='&amp;' ) {
     $_SESSION['sort_asc'] = validHtmlStr($_REQUEST['sort_asc']);
   }
   if ($_REQUEST['limit'] != '') {
-    $limitQuery = "&limit=".$_REQUEST['limit'];
+    $limitQuery = "&limit=".validInt($_REQUEST['limit']);
   }
 }
 
@@ -1103,22 +1127,32 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
   $StorageArea = NULL;
 
   $terms = isset($filter['Query']) ? $filter['Query']['terms'] : NULL;
+  if ( ! isset($terms) ) {
+        $backTrace = debug_backtrace();
+        $file = $backTrace[1]['file'];
+        $line = $backTrace[1]['line'];
+        ZM\Warning("No terms in filter from $file:$line");
+        ZM\Warning(print_r($filter,true));
+  }
   if ( isset($terms) && count($terms) ) {
     for ( $i = 0; $i < count($terms); $i++ ) {
-      if ( isset($terms[$i]['cnj']) && array_key_exists($terms[$i]['cnj'], $validQueryConjunctionTypes) ) {
-        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][cnj]").'='.urlencode($terms[$i]['cnj']);
-        $filter['sql'] .= ' '.$terms[$i]['cnj'].' ';
-        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][cnj]\" value=\"".htmlspecialchars($terms[$i]['cnj'])."\"/>\n";
+
+      $term = $terms[$i];
+
+      if ( isset($term['cnj']) && array_key_exists($term['cnj'], $validQueryConjunctionTypes) ) {
+        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][cnj]").'='.urlencode($term['cnj']);
+        $filter['sql'] .= ' '.$term['cnj'].' ';
+        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][cnj]\" value=\"".htmlspecialchars($term['cnj'])."\"/>\n";
       }
-      if ( isset($terms[$i]['obr']) && (string)(int)$terms[$i]['obr'] == $terms[$i]['obr'] ) {
-        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][obr]").'='.urlencode($terms[$i]['obr']);
-        $filter['sql'] .= ' '.str_repeat('(', $terms[$i]['obr']).' ';
-        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][obr]\" value=\"".htmlspecialchars($terms[$i]['obr'])."\"/>\n";
+      if ( isset($term['obr']) && (string)(int)$term['obr'] == $term['obr'] ) {
+        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][obr]").'='.urlencode($term['obr']);
+        $filter['sql'] .= ' '.str_repeat('(', $term['obr']).' ';
+        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][obr]\" value=\"".htmlspecialchars($term['obr'])."\"/>\n";
       }
-      if ( isset($terms[$i]['attr']) ) {
-        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][attr]").'='.urlencode($terms[$i]['attr']);
-        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][attr]\" value=\"".htmlspecialchars($terms[$i]['attr'])."\"/>\n";
-        switch ( $terms[$i]['attr'] ) {
+      if ( isset($term['attr']) ) {
+        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][attr]").'='.urlencode($term['attr']);
+        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][attr]\" value=\"".htmlspecialchars($term['attr'])."\"/>\n";
+        switch ( $term['attr'] ) {
           case 'MonitorName':
             $filter['sql'] .= 'M.Name';
             break;
@@ -1148,6 +1182,9 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
 # Starting Time
           case 'StartDateTime':
             $filter['sql'] .= 'E.StartTime';
+            break;
+          case 'FramesEventId':
+            $filter['sql'] .= 'F.EventId';
             break;
           case 'StartDate':
             $filter['sql'] .= 'to_days( E.StartTime )';
@@ -1186,18 +1223,18 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
           case 'Notes':
           case 'StateId':
           case 'Archived':
-            $filter['sql'] .= 'E.'.$terms[$i]['attr'];
+            $filter['sql'] .= 'E.'.$term['attr'];
             break;
           case 'DiskPercent':
             // Need to specify a storage area, so need to look through other terms looking for a storage area, else we default to ZM_EVENTS_PATH
             if ( ! $StorageArea ) {
               for ( $j = 0; $j < count($terms); $j++ ) {
                 if ( isset($terms[$j]['attr']) and $terms[$j]['attr'] == 'StorageId' and isset($terms[$j]['val']) ) {
-                  $StorageArea = new Storage($terms[$j]['val']);
+                  $StorageArea = ZM\Storage::find_one(array('Id'=>$terms[$j]['val']));
                   break;
                 }
               } // end foreach remaining term
-              if ( ! $StorageArea ) $StorageArea = new Storage();
+              if ( ! $StorageArea ) $StorageArea = new ZM\Storage();
             } // end no StorageArea found yet
 
             $filter['sql'] .= getDiskPercent( $StorageArea->Path() );
@@ -1206,8 +1243,8 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
             // Need to specify a storage area, so need to look through other terms looking for a storage area, else we default to ZM_EVENTS_PATH
             if ( ! $StorageArea ) {
               for ( $j = $i; $j < count($terms); $j++ ) {
-                if ( isset($terms[$i]['attr']) and $terms[$i]['attr'] == 'StorageId' and isset($terms[$j]['val']) ) {
-                  $StorageArea = new Storage($terms[$i]['val']);
+                if ( isset($terms[$j]['attr']) and $terms[$j]['attr'] == 'StorageId' and isset($terms[$j]['val']) ) {
+                  $StorageArea = ZM\Storage::find_one(array('Id'=>$terms[$j]['val']));
                 }
               } // end foreach remaining term
             } // end no StorageArea found yet
@@ -1218,8 +1255,8 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
             break;
         }
         $valueList = array();
-        foreach ( preg_split( '/["\'\s]*?,["\'\s]*?/', preg_replace( '/^["\']+?(.+)["\']+?$/', '$1', $terms[$i]['val'] ) ) as $value ) {
-          switch ( $terms[$i]['attr'] ) {
+        foreach ( preg_split( '/["\'\s]*?,["\'\s]*?/', preg_replace( '/^["\']+?(.+)["\']+?$/', '$1', $term['val'] ) ) as $value ) {
+          switch ( $term['attr'] ) {
             case 'MonitorName':
             case 'Name':
             case 'Cause':
@@ -1239,7 +1276,7 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
               }
               break;
             case 'StorageId':
-              $StorageArea = new Storage( $value );
+              $StorageArea = ZM\Storage::find_one(array('Id'=>$value));
               if ( $value != 'NULL' )
                 $value = dbEscape($value);
               break;
@@ -1267,16 +1304,16 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
               break;
           }
           $valueList[] = $value;
-        }
+        } // end foreach value
 
-        switch ( $terms[$i]['op'] ) {
+        switch ( $term['op'] ) {
           case '=' :
           case '!=' :
           case '>=' :
           case '>' :
           case '<' :
           case '<=' :
-            $filter['sql'] .= ' '.$terms[$i]['op'].' '. $value;
+            $filter['sql'] .= ' '.$term['op'].' '. $value;
             break;
           case '=~' :
             $filter['sql'] .= ' regexp '.$value;
@@ -1304,28 +1341,39 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
             $filter['sql'] .= " IS NOT $value";
             break;
           default:
-            Warning("Invalid operator in filter: " . $terms[$i]['op'] );
-        }
+            ZM\Warning('Invalid operator in filter: ' . print_r($term['op'], true));
+        } // end switch op
 
-        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][op]").'='.urlencode($terms[$i]['op']);
-        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][op]\" value=\"".htmlspecialchars($terms[$i]['op'])."\"/>\n";
-	if ( isset($terms[$i]['val']) ) {
-		$filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][val]").'='.urlencode($terms[$i]['val']);
-		$filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][val]\" value=\"".htmlspecialchars($terms[$i]['val'])."\"/>\n";
-	}
-      } // end foreach term
-      if ( isset($terms[$i]['cbr']) && (string)(int)$terms[$i]['cbr'] == $terms[$i]['cbr'] ) {
-        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][cbr]").'='.urlencode($terms[$i]['cbr']);
-        $filter['sql'] .= ' '.str_repeat( ')', $terms[$i]['cbr'] ).' ';
-        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][cbr]\" value=\"".htmlspecialchars($terms[$i]['cbr'])."\"/>\n";
+        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][op]").'='.urlencode($term['op']);
+        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][op]\" value=\"".htmlspecialchars($term['op'])."\"/>\n";
+        if ( isset($term['val']) ) {
+          $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][val]").'='.urlencode($term['val']);
+          $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][val]\" value=\"".htmlspecialchars($term['val'])."\"/>\n";
+        }
+      } // end if ( isset($term['attr']) )
+      if ( isset($term['cbr']) && (string)(int)$term['cbr'] == $term['cbr'] ) {
+        $filter['query'] .= $querySep.urlencode("filter[Query][terms][$i][cbr]").'='.urlencode($term['cbr']);
+        $filter['sql'] .= ' '.str_repeat( ')', $term['cbr'] ).' ';
+        $filter['fields'] .= "<input type=\"hidden\" name=\"filter[Query][terms][$i][cbr]\" value=\"".htmlspecialchars($term['cbr'])."\"/>\n";
       }
-    }
+    } // end foreach term
     if ( $filter['sql'] )
       $filter['sql'] = ' and ( '.$filter['sql'].' )';
     if ( $saveToSession ) {
       $_SESSION['filter'] = $filter;
     }
-  }
+  } // end if terms
+
+  #if ( 0 ) {
+    #// ICON I feel like these should be here, but not yet
+  #if ( isset($filter['Query']['sort_field']) ) {
+    #$filter['sql'] .= ' ORDER BY ' . $filter['Query']['sort_field'] . (
+      #( $filter['Query']['sort_asc'] ? ' ASC' : ' DESC' ) );
+  #}
+  #if ( $filter['Query']['limit'] ) {
+    #$filter['sql'] .= ' LIMIT ' . validInt($filter['Query']['limit']);
+  #}
+  #}
 }
 
 // Please note that the filter is passed in by copy, so you need to use the return value from this function.
@@ -1424,7 +1472,14 @@ function getPagination( $pages, $page, $maxShortcuts, $query, $querySep='&amp;' 
 
 function sortHeader( $field, $querySep='&amp;' ) {
   global $view;
-  return( '?view='.$view.$querySep.'page=1'.$_REQUEST['filter']['query'].$querySep.'sort_field='.$field.$querySep.'sort_asc='.($_REQUEST['sort_field'] == $field?!$_REQUEST['sort_asc']:0).$querySep.'limit='.$_REQUEST['limit'] );
+  return implode($querySep, array(
+    '?view='.$view,
+    'page=1'.$_REQUEST['filter']['query'],
+    'sort_field='.$field,
+    'sort_asc='.($_REQUEST['sort_field'] == $field ? !$_REQUEST['sort_asc'] : 0),
+    'limit='.validInt($_REQUEST['limit']),
+    (isset($_REQUEST['eid']) ? 'eid='.$_REQUEST['eid'] : '' ),
+  ));
 }
 
 function sortTag( $field ) {
@@ -1459,7 +1514,7 @@ function getDiskPercent($path = ZM_DIR_EVENTS) {
 }
 
 function getDiskBlocks() {
-  if ( ! $StorageArea ) $StorageArea = new Storage();
+  if ( ! $StorageArea ) $StorageArea = new ZM\Storage();
   $df = shell_exec( 'df '.escapeshellarg($StorageArea->Path() ));
   $space = -1;
   if ( preg_match( '/\s(\d+)\s+\d+\s+\d+%/ms', $df, $matches ) )
@@ -1844,17 +1899,17 @@ function coordsToPoints( $coords ) {
 function limitPoints( &$points, $min_x, $min_y, $max_x, $max_y ) {
   foreach ( $points as &$point ) {
     if ( $point['x'] < $min_x ) {
-      Logger::Debug('Limiting point x'.$point['x'].' to min_x ' . $min_x );
+      ZM\Logger::Debug('Limiting point x'.$point['x'].' to min_x ' . $min_x );
       $point['x'] = $min_x;
     } else if ( $point['x'] > $max_x ) {
-      Logger::Debug('Limiting point x'.$point['x'].' to max_x ' . $max_x );
+      ZM\Logger::Debug('Limiting point x'.$point['x'].' to max_x ' . $max_x );
       $point['x'] = $max_x;
     }
     if ( $point['y'] < $min_y ) {
-      Logger::Debug('Limiting point y'.$point['y'].' to min_y ' . $min_y );
+      ZM\Logger::Debug('Limiting point y'.$point['y'].' to min_y ' . $min_y );
       $point['y'] = $min_y;
     } else if ( $point['y'] > $max_y ) {
-      Logger::Debug('Limiting point y'.$point['y'].' to max_y ' . $max_y );
+      ZM\Logger::Debug('Limiting point y'.$point['y'].' to max_y ' . $max_y );
       $point['y'] = $max_y;
     }
   } // end foreach point
@@ -1909,13 +1964,13 @@ function initX10Status() {
   if ( !isset($x10_status) ) {
     $socket = socket_create( AF_UNIX, SOCK_STREAM, 0 );
     if ( $socket < 0 ) {
-      Fatal( 'socket_create() failed: '.socket_strerror($socket) );
+      ZM\Fatal( 'socket_create() failed: '.socket_strerror($socket) );
     }
     $sock_file = ZM_PATH_SOCKS.'/zmx10.sock';
     if ( @socket_connect( $socket, $sock_file ) ) {
       $command = 'status';
       if ( !socket_write( $socket, $command ) ) {
-        Fatal( "Can't write to control socket: ".socket_strerror(socket_last_error($socket)) );
+        ZM\Fatal( "Can't write to control socket: ".socket_strerror(socket_last_error($socket)) );
       }
       socket_shutdown( $socket, 1 );
       $x10Output = '';
@@ -1951,13 +2006,13 @@ function getDeviceStatusX10( $key ) {
 function setDeviceStatusX10( $key, $status ) {
   $socket = socket_create( AF_UNIX, SOCK_STREAM, 0 );
   if ( $socket < 0 ) {
-    Fatal( 'socket_create() failed: '.socket_strerror($socket) );
+    ZM\Fatal( 'socket_create() failed: '.socket_strerror($socket) );
   }
   $sock_file = ZM_PATH_SOCKS.'/zmx10.sock';
   if ( @socket_connect( $socket, $sock_file ) ) {
     $command = "$status;$key";
     if ( !socket_write( $socket, $command ) ) {
-      Fatal( "Can't write to control socket: ".socket_strerror(socket_last_error($socket)) );
+      ZM\Fatal( "Can't write to control socket: ".socket_strerror(socket_last_error($socket)) );
     }
     socket_shutdown( $socket, 1 );
     $x10Response = socket_read( $socket, 256 );
@@ -1980,18 +2035,18 @@ function logState() {
   $state = 'ok';
 
   $levelCounts = array(
-      Logger::FATAL => array( ZM_LOG_ALERT_FAT_COUNT, ZM_LOG_ALARM_FAT_COUNT ),
-      Logger::ERROR => array( ZM_LOG_ALERT_ERR_COUNT, ZM_LOG_ALARM_ERR_COUNT ),
-      Logger::WARNING => array( ZM_LOG_ALERT_WAR_COUNT, ZM_LOG_ALARM_WAR_COUNT ),
+      ZM\Logger::FATAL => array( ZM_LOG_ALERT_FAT_COUNT, ZM_LOG_ALARM_FAT_COUNT ),
+      ZM\Logger::ERROR => array( ZM_LOG_ALERT_ERR_COUNT, ZM_LOG_ALARM_ERR_COUNT ),
+      ZM\Logger::WARNING => array( ZM_LOG_ALERT_WAR_COUNT, ZM_LOG_ALARM_WAR_COUNT ),
       );
 
   # This is an expensive request, as it has to hit every row of the Logs Table
-  $sql = 'SELECT Level, COUNT(Level) AS LevelCount FROM Logs WHERE Level < '.Logger::INFO.' AND TimeKey > unix_timestamp(now() - interval '.ZM_LOG_CHECK_PERIOD.' second) GROUP BY Level ORDER BY Level ASC';
+  $sql = 'SELECT Level, COUNT(Level) AS LevelCount FROM Logs WHERE Level < '.ZM\Logger::INFO.' AND TimeKey > unix_timestamp(now() - interval '.ZM_LOG_CHECK_PERIOD.' second) GROUP BY Level ORDER BY Level ASC';
   $counts = dbFetchAll($sql);
   if ( $counts ) {
     foreach ( $counts as $count ) {
-      if ( $count['Level'] <= Logger::PANIC )
-        $count['Level'] = Logger::FATAL;
+      if ( $count['Level'] <= ZM\Logger::PANIC )
+        $count['Level'] = ZM\Logger::FATAL;
       if ( !($levelCount = $levelCounts[$count['Level']]) ) {
         Error('Unexpected Log level '.$count['Level']);
         next;
@@ -2023,15 +2078,15 @@ function checkJsonError($value) {
     $value = var_export($value,true);
     switch( json_last_error() ) {
       case JSON_ERROR_DEPTH :
-        Fatal( "Unable to decode JSON string '$value', maximum stack depth exceeded" );
+        ZM\Fatal( "Unable to decode JSON string '$value', maximum stack depth exceeded" );
       case JSON_ERROR_CTRL_CHAR :
-        Fatal( "Unable to decode JSON string '$value', unexpected control character found" );
+        ZM\Fatal( "Unable to decode JSON string '$value', unexpected control character found" );
       case JSON_ERROR_STATE_MISMATCH :
-        Fatal( "Unable to decode JSON string '$value', invalid or malformed JSON" );
+        ZM\Fatal( "Unable to decode JSON string '$value', invalid or malformed JSON" );
       case JSON_ERROR_SYNTAX :
-        Fatal( "Unable to decode JSON string '$value', syntax error" );
+        ZM\Fatal( "Unable to decode JSON string '$value', syntax error" );
       default :
-        Fatal( "Unable to decode JSON string '$value', unexpected error ".json_last_error() );
+        ZM\Fatal( "Unable to decode JSON string '$value', unexpected error ".json_last_error() );
       case JSON_ERROR_NONE:
         break;
     }
@@ -2119,7 +2174,7 @@ define( 'HTTP_STATUS_BAD_REQUEST', 400 );
 define( 'HTTP_STATUS_FORBIDDEN', 403 );
 
 function ajaxError( $message, $code=HTTP_STATUS_OK ) {
-  Error( $message );
+  ZM\Error( $message );
   if ( function_exists( 'ajaxCleanup' ) )
     ajaxCleanup();
   if ( $code == HTTP_STATUS_OK ) {
@@ -2165,7 +2220,7 @@ function cache_bust( $file ) {
   if ( file_exists(ZM_DIR_CACHE.'/'.$cacheFile) or symlink(ZM_PATH_WEB.'/'.$file, ZM_DIR_CACHE.'/'.$cacheFile) ) {
     return 'cache/'.$cacheFile;
   } else {
-    Warning("Failed linking $file to $cacheFile");
+    ZM\Warning("Failed linking $file to $cacheFile");
   }
   return $file;
 }
@@ -2232,19 +2287,18 @@ function validHtmlStr( $input ) {
   return( htmlspecialchars( $input, ENT_QUOTES ) );
 }
 
-function getStreamHTML( $monitor, $options = array() ) {
+function getStreamHTML($monitor, $options = array()) {
 
-  if ( isset($options['scale']) and $options['scale'] and ( $options['scale'] != 100 ) ) {
-    //Warning("Scale to " . $options['scale'] );
-    $options['width'] = reScale( $monitor->Width(), $options['scale'] ) . 'px';
-    $options['height'] = reScale( $monitor->Height(), $options['scale'] ) . 'px';
+  if ( isset($options['scale']) and $options['scale'] and ($options['scale'] != 100) ) {
+    $options['width'] = reScale($monitor->Width(), $options['scale']).'px';
+    $options['height'] = reScale($monitor->Height(), $options['scale']).'px';
   } else {
     # scale is empty or 100
     # There may be a fixed width applied though, in which case we need to leave the height empty
     if ( ! ( isset($options['width']) and $options['width'] ) ) {
-      $options['width'] = $monitor->Width() . 'px';
+      $options['width'] = $monitor->Width().'px';
       if ( ! ( isset($options['height']) and $options['height'] ) ) {
-        $options['height'] = $monitor->Height() . 'px';
+        $options['height'] = $monitor->Height().'px';
       }
     } else if ( ! isset($options['height']) ) {
       $options['height'] = '';
@@ -2268,10 +2322,10 @@ function getStreamHTML( $monitor, $options = array() ) {
   //FIXME, the width and height of the image need to be scaled.
   } else if ( ZM_WEB_STREAM_METHOD == 'mpeg' && ZM_MPEG_LIVE_FORMAT ) {
     $streamSrc = $monitor->getStreamSrc( array(
-      'mode'=>'mpeg',
-      'scale'=>(isset($options['scale'])?$options['scale']:100),
-      'bitrate'=>ZM_WEB_VIDEO_BITRATE,
-      'maxfps'=>ZM_WEB_VIDEO_MAXFPS,
+      'mode'   => 'mpeg',
+      'scale'  => (isset($options['scale'])?$options['scale']:100),
+      'bitrate'=> ZM_WEB_VIDEO_BITRATE,
+      'maxfps' => ZM_WEB_VIDEO_MAXFPS,
       'format' => ZM_MPEG_LIVE_FORMAT
     ) );
     return getVideoStreamHTML( 'liveStream'.$monitor->Id(), $streamSrc, $options['width'], $options['height'], ZM_MPEG_LIVE_FORMAT, $monitor->Name() );
@@ -2289,10 +2343,10 @@ function getStreamHTML( $monitor, $options = array() ) {
           $monitor->Name());
   } else {
     if ( $options['mode'] == 'stream' ) {
-      Info( 'The system has fallen back to single jpeg mode for streaming. Consider enabling Cambozola or upgrading the client browser.' );
+      ZM\Info( 'The system has fallen back to single jpeg mode for streaming. Consider enabling Cambozola or upgrading the client browser.' );
     }
     $options['mode'] = 'single';
-    $streamSrc = $monitor->getStreamSrc( $options );
+    $streamSrc = $monitor->getStreamSrc($options);
     return getImageStill( 'liveStream'.$monitor->Id(), $streamSrc, $options['width'], $options['height'], $monitor->Name());
   }
 } // end function getStreamHTML
@@ -2305,7 +2359,7 @@ function getStreamMode( ) {
     $streamMode = 'jpeg';
   } else {
     $streamMode = 'single';
-    Info( 'The system has fallen back to single jpeg mode for streaming. Consider enabling Cambozola or upgrading the client browser.' );
+    ZM\Info( 'The system has fallen back to single jpeg mode for streaming. Consider enabling Cambozola or upgrading the client browser.' );
   }
   return $streamMode;
 } // end function getStreamMode
@@ -2346,13 +2400,13 @@ function check_timezone() {
                #");
 
   if ( $sys_tzoffset != $php_tzoffset )
-    Fatal("ZoneMinder is not installed properly: php's date.timezone does not match the system timezone!");
+    ZM\Error("ZoneMinder is not installed properly: php's date.timezone does not match the system timezone!");
 
   if ( $sys_tzoffset != $mysql_tzoffset )
-    Error("ZoneMinder is not installed properly: mysql's timezone does not match the system timezone! Event lists will display incorrect times.");
+    ZM\Error("ZoneMinder is not installed properly: mysql's timezone does not match the system timezone! Event lists will display incorrect times.");
 
   if (!ini_get('date.timezone') || !date_default_timezone_set(ini_get('date.timezone')))
-    Fatal( "ZoneMinder is not installed properly: php's date.timezone is not set to a valid timezone" );
+    ZM\Error("ZoneMinder is not installed properly: php's date.timezone is not set to a valid timezone");
 
 }
 
@@ -2378,7 +2432,6 @@ function unparse_url($parsed_url, $substitutions = array() ) {
 
 // PP - POST request handler for PHP which does not need extensions
 // credit: http://wezfurlong.org/blog/2006/nov/http-post-from-php-without-curl/
-
 
 function do_request($method, $url, $data=array(), $optional_headers = null) {
   global $php_errormsg;
@@ -2413,17 +2466,19 @@ function do_post_request($url, $data, $optional_headers = null) {
   $ctx = stream_context_create($params);
   $fp = @fopen($url, 'rb', false, $ctx);
   if ( !$fp ) {
-    throw new Exception("Problem with $url, $php_errormsg");
+    throw new Exception("Problem with $url, "
+      .print_r(error_get_last(),true));
   }
   $response = @stream_get_contents($fp);
   if ( $response === false ) {
-    throw new Exception("Problem reading data from $url, $php_errormsg");
+    throw new Exception("Problem reading data from $url, data: ".print_r($params,true)
+      .print_r(error_get_last(),true));
   }
   return $response;
 }
 
 // The following works around php not being built with semaphore functions.
-if (!function_exists('sem_get')) {
+if ( !function_exists('sem_get') ) {
   function sem_get($key) {
     return fopen(__FILE__ . '.sem.' . $key, 'w+');
   }
@@ -2435,7 +2490,7 @@ if (!function_exists('sem_get')) {
   }
 }
 
-if( !function_exists('ftok') ) {
+if ( !function_exists('ftok') ) {
   function ftok($filename = "", $proj = "") {
     if ( empty($filename) || !file_exists($filename) ) {
       return -1;
@@ -2468,6 +2523,47 @@ function getAffectedIds( $name ) {
 
 function format_duration($time, $separator=':') {
   return sprintf('%02d%s%02d%s%02d', floor($time/3600), $separator, ($time/60)%60, $separator, $time%60);
+}
+
+function array_recursive_diff($aArray1, $aArray2) {
+  $aReturn = array();
+
+  foreach ($aArray1 as $mKey => $mValue) {
+    if ( array_key_exists($mKey, $aArray2) ) {
+      if ( is_array($mValue) ) {
+        $aRecursiveDiff = array_recursive_diff($mValue, $aArray2[$mKey]);
+        if ( count($aRecursiveDiff) ) {
+          $aReturn[$mKey] = $aRecursiveDiff;
+        }
+      } else {
+        if ( $mValue != $aArray2[$mKey] ) {
+          $aReturn[$mKey] = $mValue;
+        }
+      }
+    } else {
+      $aReturn[$mKey] = $mValue;
+    }
+  }
+  # Now check for keys in array2 that are not in array1
+  foreach ($aArray2 as $mKey => $mValue) {
+    if ( array_key_exists($mKey, $aArray1) ) {
+      # Already checked it... I think.
+      #if ( is_array($mValue) ) {
+        #$aRecursiveDiff = array_recursive_diff($mValue, $aArray2[$mKey]);
+        #if ( count($aRecursiveDiff) ) {
+          #$aReturn[$mKey] = $aRecursiveDiff;
+        #}
+      #} else {
+        #if ( $mValue != $aArray2[$mKey] ) {
+          #$aReturn[$mKey] = $mValue;
+        #}
+      #}
+    } else {
+      $aReturn[$mKey] = $mValue;
+    }
+  }
+
+  return $aReturn;
 }
 
 ?>
