@@ -19,6 +19,7 @@
 
 #include "zm.h"
 #include "zm_signal.h"
+#include "zm_utils.h"
 
 #if HAVE_LIBAVFORMAT
 
@@ -35,11 +36,6 @@ extern "C" {
 #define AV_ERROR_MAX_STRING_SIZE 64
 #endif
 
-#ifdef SOLARIS
-#include <sys/errno.h>  // for ESRCH
-#include <signal.h>
-#include <pthread.h>
-#endif
 #include <string>
 
 
@@ -260,10 +256,17 @@ int FfmpegCamera::Capture(Image &image) {
         &&
         (keyframe || have_video_keyframe)
         ) {
-      ret = zm_receive_frame(mVideoCodecContext, mRawFrame, packet);
+      ret = zm_send_packet_receive_frame(mVideoCodecContext, mRawFrame, packet);
       if ( ret < 0 ) {
-        Error("Unable to get frame at frame %d: %s, continuing",
-            frameCount, av_make_error_string(ret).c_str());
+        if ( AVERROR(EAGAIN) != ret ) {
+          Warning("Unable to receive frame %d: code %d %s. error count is %d",
+              frameCount, ret, av_make_error_string(ret).c_str(), error_count);
+          error_count += 1;
+          if ( error_count > 100 ) {
+            Error("Error count over 100, going to close and re-open stream");
+            return -1;
+          }
+        }
         zm_av_packet_unref(&packet);
         continue;
       }
@@ -337,23 +340,26 @@ int FfmpegCamera::OpenFfmpeg() {
   }
 
   // Set transport method as specified by method field, rtpUni is default
-  const std::string method = Method();
-  if ( method == "rtpMulti" ) {
-    ret = av_dict_set(&opts, "rtsp_transport", "udp_multicast", 0);
-  } else if ( method == "rtpRtsp" ) {
-    ret = av_dict_set(&opts, "rtsp_transport", "tcp", 0);
-  } else if ( method == "rtpRtspHttp" ) {
-    ret = av_dict_set(&opts, "rtsp_transport", "http", 0);
-  } else if ( method == "rtpUni" ) {
-    ret = av_dict_set(&opts, "rtsp_transport", "udp", 0);
-  } else {
-    Warning("Unknown method (%s)", method.c_str());
-  }
+  std::string protocol = mPath.substr(0, 4);
+  string_toupper(protocol);
+  if ( protocol == "RTSP" ) {
+    const std::string method = Method();
+    if ( method == "rtpMulti" ) {
+      ret = av_dict_set(&opts, "rtsp_transport", "udp_multicast", 0);
+    } else if ( method == "rtpRtsp" ) {
+      ret = av_dict_set(&opts, "rtsp_transport", "tcp", 0);
+    } else if ( method == "rtpRtspHttp" ) {
+      ret = av_dict_set(&opts, "rtsp_transport", "http", 0);
+    } else if ( method == "rtpUni" ) {
+      ret = av_dict_set(&opts, "rtsp_transport", "udp", 0);
+    } else {
+      Warning("Unknown method (%s)", method.c_str());
+    }
+    if ( ret < 0 ) {
+      Warning("Could not set rtsp_transport method '%s'", method.c_str());
+    }
+  }  // end if RTSP
   // #av_dict_set(&opts, "timeout", "10000000", 0); // in microseconds.
-
-  if ( ret < 0 ) {
-    Warning("Could not set rtsp_transport method '%s'", method.c_str());
-  }
 
   Debug(1, "Calling avformat_open_input for %s", mPath.c_str());
 
@@ -945,21 +951,23 @@ int FfmpegCamera::CaptureAndRecord(
         int ret = videoStore->writeVideoFramePacket(&packet);
         if ( ret < 0 ) {
           // Less than zero and we skipped a frame
-          Error("Unable to write video packet %d: %s",
-              frameCount, av_make_error_string(ret).c_str());
+          Error("Unable to write video packet code: %d, framecount %d: %s",
+              ret, frameCount, av_make_error_string(ret).c_str());
         } else {
           have_video_keyframe = true;
         }
       }  // end if keyframe or have_video_keyframe
 
-      ret = zm_receive_frame(mVideoCodecContext, mRawFrame, packet);
+      ret = zm_send_packet_receive_frame(mVideoCodecContext, mRawFrame, packet);
       if ( ret < 0 ) {
-        Warning("Unable to receive frame %d: %s. error count is %d",
-            frameCount, av_make_error_string(ret).c_str(), error_count);
-        error_count += 1;
-        if ( error_count > 100 ) {
-          Error("Error count over 100, going to close and re-open stream");
-          return -1;
+        if ( AVERROR(EAGAIN) != ret ) {
+          Warning("Unable to receive frame %d: code %d %s. error count is %d",
+              frameCount, ret, av_make_error_string(ret).c_str(), error_count);
+          error_count += 1;
+          if ( error_count > 100 ) {
+            Error("Error count over 100, going to close and re-open stream");
+            return -1;
+          }
         }
         zm_av_packet_unref(&packet);
         continue;
