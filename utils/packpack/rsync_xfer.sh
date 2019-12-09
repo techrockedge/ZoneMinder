@@ -26,16 +26,15 @@ if [ "${TRAVIS_EVENT_TYPE}" == "cron" ] || [ "${OS}" == "debian" ] || [ "${OS}" 
     echo "Target subfolder set to $targetfolder"
     echo
     if [ "${USE_SFTP}" == "yes" ]; then
-      results="$(rsync build/* zmrepo@zmrepo.zoneminder.com:${targetfolder}/ 2>&1)"
-      if [ -z "$results" ]; then
+      echo "Running \$(rsync -v -e 'ssh -vvv' build/* zmrepo@zmrepo.zoneminder.com:${targetfolder}/ 2>&1)"
+      rsync -v -e 'ssh -vvv' build/* zmrepo@zmrepo.zoneminder.com:${targetfolder}/ 2>&1
+      if [ $? -eq 0 ]; then
         echo 
         echo "Files copied successfully."
         echo
       else 
         echo
         echo "ERROR: Attempt to rsync to zmrepo.zoneminder.com failed!"
-        echo "rsync gave the following error message:"
-        echo \"$results\"
         echo
         exit 99
       fi

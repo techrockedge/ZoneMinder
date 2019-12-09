@@ -79,7 +79,9 @@ function CSPHeaders($view, $nonce) {
     }
     default: {
       // Use Report-Only mode on all other pages.
-      header("Content-Security-Policy-Report-Only: script-src 'unsafe-inline' 'self' 'nonce-$nonce' $additionalScriptSrc; report-uri https://zmrepo.zoneminder.com");
+      header("Content-Security-Policy-Report-Only: script-src 'unsafe-inline' 'self' 'nonce-$nonce' $additionalScriptSrc;".
+        (ZM_CSP_REPORT_URI ? ' report-uri '.ZM_CSP_REPORT_URI : '' )
+      );
       break;
     }
   }
@@ -1447,7 +1449,7 @@ function sortHeader($field, $querySep='&amp;') {
   global $view;
   return implode($querySep, array(
     '?view='.$view,
-    'page=1'.$_REQUEST['filter']['query'],
+    'page=1'.(isset($_REQUEST['filter'])?$_REQUEST['filter']['query']:''),
     'sort_field='.$field,
     'sort_asc='.($_REQUEST['sort_field'] == $field ? !$_REQUEST['sort_asc'] : 0),
     'limit='.validInt($_REQUEST['limit']),
@@ -2278,15 +2280,15 @@ function validHtmlStr($input) {
 function getStreamHTML($monitor, $options = array()) {
 
   if ( isset($options['scale']) and $options['scale'] and ($options['scale'] != 100) ) {
-    $options['width'] = reScale($monitor->Width(), $options['scale']).'px';
-    $options['height'] = reScale($monitor->Height(), $options['scale']).'px';
+    $options['width'] = reScale($monitor->ViewWidth(), $options['scale']).'px';
+    $options['height'] = reScale($monitor->ViewHeight(), $options['scale']).'px';
   } else {
     # scale is empty or 100
     # There may be a fixed width applied though, in which case we need to leave the height empty
     if ( ! ( isset($options['width']) and $options['width'] ) ) {
-      $options['width'] = $monitor->Width().'px';
+      $options['width'] = $monitor->ViewWidth().'px';
       if ( ! ( isset($options['height']) and $options['height'] ) ) {
-        $options['height'] = $monitor->Height().'px';
+        $options['height'] = $monitor->ViewHeight().'px';
       }
     } else if ( ! isset($options['height']) ) {
       $options['height'] = '';
@@ -2326,8 +2328,8 @@ function getStreamHTML($monitor, $options = array()) {
     elseif ( canStreamApplet() )
       // Helper, empty widths and heights really don't work.
       return getHelperStream( 'liveStream'.$monitor->Id(), $streamSrc, 
-          $options['width'] ? $options['width'] : $monitor->Width(), 
-          $options['height'] ? $options['height'] : $monitor->Height(),
+          $options['width'] ? $options['width'] : $monitor->ViewWidth(), 
+          $options['height'] ? $options['height'] : $monitor->ViewHeight(),
           $monitor->Name());
   } else {
     if ( $options['mode'] == 'stream' ) {
@@ -2391,13 +2393,13 @@ function check_timezone() {
                #");
 
   if ( $sys_tzoffset != $php_tzoffset )
-    ZM\Error("ZoneMinder is not installed properly: php's date.timezone $php_tzoffset does not match the system timezone $sys_tzoffset!");
+    ZM\Error("ZoneMinder is not configured properly: php's date.timezone $php_tzoffset does not match the system timezone $sys_tzoffset! Please check Options->System->Timezone.");
 
   if ( $sys_tzoffset != $mysql_tzoffset )
-    ZM\Error("ZoneMinder is not installed properly: mysql's timezone does not match the system timezone! Event lists will display incorrect times.");
+    ZM\Error("ZoneMinder is not configured properly: mysql's timezone does not match the system timezone! Event lists will display incorrect times.");
 
   if (!ini_get('date.timezone') || !date_default_timezone_set(ini_get('date.timezone')))
-    ZM\Error("ZoneMinder is not installed properly: php's date.timezone is not set to a valid timezone");
+    ZM\Error("ZoneMinder is not configured properly: php's date.timezone is not set to a valid timezone. Please check Options->System->Timezone");
 
 }
 
@@ -2518,13 +2520,23 @@ function format_duration($time, $separator=':') {
 
 function array_recursive_diff($aArray1, $aArray2) {
   $aReturn = array();
+  if ( ! (is_array($aArray1) and is_array($aArray2) ) ) {
+        $backTrace = debug_backtrace();
+        ZM\Warning("Bad arrays passed 1:" . print_r($aArray1,true) . "\n2: " . print_r($aArray2,true)."\n from: ".print_r($backTrace,true));
+        return;
+
+  }
 
   foreach ( $aArray1 as $mKey => $mValue ) {
     if ( array_key_exists($mKey, $aArray2) ) {
       if ( is_array($mValue) ) {
-        $aRecursiveDiff = array_recursive_diff($mValue, $aArray2[$mKey]);
-        if ( count($aRecursiveDiff) ) {
-          $aReturn[$mKey] = $aRecursiveDiff;
+        if ( is_array($aArray2[$mKey]) ) {
+          $aRecursiveDiff = array_recursive_diff($mValue, $aArray2[$mKey]);
+          if ( count($aRecursiveDiff) ) {
+            $aReturn[$mKey] = $aRecursiveDiff;
+          }
+        } else {
+          $aReturn[$mKey] = $mValue;
         }
       } else {
         if ( $mValue != $aArray2[$mKey] ) {
@@ -2556,5 +2568,40 @@ function array_recursive_diff($aArray1, $aArray2) {
 
   return $aReturn;
 }
+
+function html_radio($name, $values, $selected=null, $options=array(), $attrs=array()) {
+
+  $html = '';
+  if ( isset($options['default']) and ( $selected == null ) ) {
+    $selected = $options['default'];
+  } # end if
+
+  foreach ( $values as $value => $label ) {
+    if ( isset($options['container']) ) {
+      $html .= $options['container'][0];
+    }
+    $attributes = array_map(
+          function($attr, $value){return $attr.'="'.$value.'"';},
+          array_keys($attrs),
+          array_values($attrs)
+        );
+    $attributes_string = implode(' ', $attributes);
+
+    $html .= sprintf('
+      <div class="form-check%7$s">
+        <label class="form-check-label radio%7$s" for="%1$s%6$s%2$s">
+        <input class="form-check-input" type="radio" name="%1$s" value="%2$s" id="%1$s%6$s%2$s" %4$s%5$s />
+        %3$s</label></div>
+        ', $name, $value, $label, ($value==$selected?' checked="checked"':''),
+        $attributes_string,
+        (isset($options['id']) ? $options['id'] : ''),
+        ( ( (!isset($options['inline'])) or $options['inline'] ) ? '-inline' : '')
+      );
+    if ( isset($options['container']) ) {
+      $html .= $options['container'][1];
+    }
+  } # end foreach value
+  return $html;
+} # end sub html_radio
 
 ?>

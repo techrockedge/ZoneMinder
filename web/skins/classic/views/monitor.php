@@ -311,12 +311,12 @@ $Colours = array(
     );
 
 $orientations = array(
-    '0' => translate('Normal'),
-    '90' => translate('RotateRight'),
-    '180' => translate('Inverted'),
-    '270' => translate('RotateLeft'),
-    'hori' => translate('FlippedHori'),
-    'vert' => translate('FlippedVert')
+    'ROTATE_0' => translate('Normal'),
+    'ROTATE_90' => translate('RotateRight'),
+    'ROTATE_180' => translate('Inverted'),
+    'ROTATE_270' => translate('RotateLeft'),
+    'FLIP_HORI' => translate('FlippedHori'),
+    'FLIP_VERT' => translate('FlippedVert')
     );
 
 $deinterlaceopts = array(
@@ -663,6 +663,7 @@ switch ( $tab ) {
           <td>
 <?php
       $monitors = dbFetchAll('SELECT Id, Name FROM Monitors ORDER BY Sequence ASC');
+      $monitor_options = array();
       foreach ( $monitors as $linked_monitor ) {
         if ( (!$monitor->Id() || ($monitor->Id()!= $linked_monitor['Id'])) && visibleMonitor($linked_monitor['Id']) ) {
           $monitor_options[$linked_monitor['Id']] = validHtmlStr($linked_monitor['Name']);
@@ -682,7 +683,7 @@ switch ( $tab ) {
           <td><?php echo translate('Groups'); ?></td>
           <td><select name="newMonitor[GroupIds][]" multiple="multiple" class="chosen"><?php
             echo htmlOptions(ZM\Group::get_dropdown_options(), $monitor->GroupIds());
-            ?></td>
+            ?></select></td>
         </tr>
         <tr><td><?php echo translate('AnalysisFPS') ?></td><td><input type="text" name="newMonitor[AnalysisFPSLimit]" value="<?php echo validHtmlStr($monitor->AnalysisFPSLimit()) ?>" size="6"/></td></tr>
 <?php

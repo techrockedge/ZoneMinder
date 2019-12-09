@@ -80,7 +80,7 @@ class Server extends ZM_Object {
 
   public function PathToZMS( $new = null ) {
     if ( $new != null )
-      $this{'PathToZMS'} = $new;
+      $this->{'PathToZMS'} = $new;
     if ( $this->Id() and $this->{'PathToZMS'} ) {
       return $this->{'PathToZMS'};
     } else {
@@ -93,6 +93,11 @@ class Server extends ZM_Object {
   }
 
 	public function Url( $port = null ) {
+    if ( ! ( $this->Id() or $port ) ) {
+      # Don't specify a hostname or port, the browser will figure it out
+      return '';
+    }
+
     $url = $this->Protocol().'://';
 		$url .= $this->Hostname();
     if ( $port ) {

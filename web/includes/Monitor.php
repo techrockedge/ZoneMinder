@@ -36,7 +36,7 @@ protected $defaults = array(
   // These are NOT NULL default 0 in the db, but 0 is not a valid value. FIXME
   'Width' => null,
   'Height' => null,
-  'Colours' => 1,
+  'Colours' => 4,
   'Palette' =>  '0',
   'Orientation' => null,
   'Deinterlacing' =>  0,
@@ -116,11 +116,11 @@ private $status_fields = array(
 );
 
   public function Control() {
-    if ( !array_key_exists('Control', $this) ) {
+    if ( !property_exists($this, 'Control') ) {
       if ( $this->ControlId() )
         $this->{'Control'} = Control::find_one(array('Id'=>$this->{'ControlId'}));
 
-      if ( !(array_key_exists('Control', $this) and $this->{'Control'}) )
+      if ( !(property_exists($this, 'Control') and $this->{'Control'}) )
         $this->{'Control'} = new Control();
     }
     return $this->{'Control'};
@@ -138,7 +138,7 @@ private $status_fields = array(
         $this->{$fn} = $args[0];
       }
     }
-    if ( array_key_exists($fn, $this) ) {
+    if ( property_exists($this, $fn) ) {
       return $this->{$fn};
     } else if ( array_key_exists($fn, $this->defaults) ) {
       if ( is_array($this->defaults[$fn]) ) {
@@ -199,24 +199,31 @@ private $status_fields = array(
     return $streamSrc;
   } // end function getStreamSrc
 
-  public function Width($new = null) {
+	public function isPortrait() {
+		return $this->ViewWidth() > $this->ViewHeight();
+	}
+	public function isLandscape() {
+		return $this->ViewWidth() < $this->ViewHeight();
+	}
+
+  public function ViewWidth($new = null) {
     if ( $new )
       $this->{'Width'} = $new;
 
-    $field = ( $this->Orientation() == '90' or $this->Orientation() == '270' ) ? 'Height' : 'Width';
-    if ( array_key_exists($field, $this) )
+    $field = ( $this->Orientation() == 'ROTATE_90' or $this->Orientation() == 'ROTATE_270' ) ? 'Height' : 'Width';
+    if ( property_exists($this, $field) )
       return $this->{$field};
-    return $this->defaults{$field};
+    return $this->defaults[$field];
   } // end function Width
 
-  public function Height($new=null) {
+  public function ViewHeight($new=null) {
     if ( $new )
       $this->{'Height'} = $new;
 
-    $field = ( $this->Orientation() == '90' or $this->Orientation() == '270' ) ?  'Width' : 'Height';
-    if ( array_key_exists($field, $this) )
+    $field = ( $this->Orientation() == 'ROTATE_90' or $this->Orientation() == 'ROTATE_270' ) ?  'Width' : 'Height';
+    if ( property_exists($this, $field) )
       return $this->{$field};
-    return $this->defaults{$field};
+    return $this->defaults[$field];
   } // end function Height
 
   public function SignalCheckColour($new=null) {
@@ -227,10 +234,10 @@ private $status_fields = array(
 
     // Validate that it's a valid colour (we seem to allow color names, not just hex).
     // This also helps prevent XSS.
-    if (array_key_exists($field, $this) && preg_match('/^[#0-9a-zA-Z]+$/', $this->{$field})) {
+    if ( property_exists($this, $field) && preg_match('/^[#0-9a-zA-Z]+$/', $this->{$field})) {
       return $this->{$field};
     }
-    return $this->defaults{$field};
+    return $this->defaults[$field];
   } // end function SignalCheckColour
 
   public static function find( $parameters = array(), $options = array() ) {
@@ -246,7 +253,7 @@ private $status_fields = array(
       Warning('Attempt to control a monitor with no Id');
       return;
     }
-    if ( (!defined('ZM_SERVER_ID')) or ( array_key_exists('ServerId', $this) and (ZM_SERVER_ID==$this->{'ServerId'}) ) ) {
+    if ( (!defined('ZM_SERVER_ID')) or ( property_exists($this, 'ServerId') and (ZM_SERVER_ID==$this->{'ServerId'}) ) ) {
       if ( $this->Type() == 'Local' ) {
         $zmcArgs = '-d '.$this->{'Device'};
       } else {
@@ -299,7 +306,7 @@ private $status_fields = array(
       return;
     }
 
-    if ( (!defined('ZM_SERVER_ID')) or ( array_key_exists('ServerId', $this) and (ZM_SERVER_ID==$this->{'ServerId'}) ) ) {
+    if ( (!defined('ZM_SERVER_ID')) or ( property_exists($this, 'ServerId') and (ZM_SERVER_ID==$this->{'ServerId'}) ) ) {
       if ( $this->{'Function'} == 'None' || $this->{'Function'} == 'Monitor' || $mode == 'stop' ) {
         if ( ZM_OPT_CONTROL ) {
           daemonControl('stop', 'zmtrack.pl', '-m '.$this->{'Id'});
@@ -360,8 +367,8 @@ private $status_fields = array(
       }
     }
 
-    if ( !array_key_exists('GroupIds', $this) ) {
-      if ( array_key_exists('Id', $this) and $this->{'Id'} ) {
+    if ( !property_exists($this, 'GroupIds') ) {
+      if ( property_exists($this, 'Id') and $this->{'Id'} ) {
         $this->{'GroupIds'} = dbFetchAll('SELECT `GroupId` FROM `Groups_Monitors` WHERE `MonitorId`=?', 'GroupId', array($this->{'Id'}) );
         if ( ! $this->{'GroupIds'} )
           $this->{'GroupIds'} = array();
@@ -373,6 +380,10 @@ private $status_fields = array(
   }
 
   public function delete() {
+    if ( ! $this->{'Id'} ) {
+      Warning("Attempt to delete a monitor without id.");
+      return;
+    }
     $this->zmaControl('stop');
     $this->zmcControl('stop');
 
@@ -384,11 +395,13 @@ private $status_fields = array(
       foreach ($markEids as $markEid)
         deleteEvent($markEid);
 
-      deletePath(ZM_DIR_EVENTS.'/'.basename($this->{'Name'}));
+      if ( $this->{'Name'} )
+        deletePath(ZM_DIR_EVENTS.'/'.basename($this->{'Name'}));
       deletePath(ZM_DIR_EVENTS.'/'.$this->{'Id'});
       $Storage = $this->Storage();
       if ( $Storage->Path() != ZM_DIR_EVENTS ) {
-        deletePath($Storage->Path().'/'.basename($this->{'Name'}));
+        if ( $this->{'Name'} )
+          deletePath($Storage->Path().'/'.basename($this->{'Name'}));
         deletePath($Storage->Path().'/'.$this->{'Id'});
       }
     } // end if !ZM_OPT_FAST_DELETE
@@ -404,7 +417,7 @@ private $status_fields = array(
     if ( $new ) {
       $this->{'Storage'} = $new;
     }
-    if ( ! ( array_key_exists('Storage', $this) and $this->{'Storage'} ) ) {
+    if ( ! ( property_exists($this, 'Storage') and $this->{'Storage'} ) ) {
       $this->{'Storage'} = isset($this->{'StorageId'}) ? 
         Storage::find_one(array('Id'=>$this->{'StorageId'})) : 
           new Storage(NULL);
@@ -480,7 +493,7 @@ public function sendControlCommand($command) {
     }
   }
 
-  if ( (!defined('ZM_SERVER_ID')) or ( array_key_exists('ServerId', $this) and (ZM_SERVER_ID==$this->{'ServerId'}) ) ) {
+  if ( (!defined('ZM_SERVER_ID')) or ( property_exists($this, 'ServerId') and (ZM_SERVER_ID==$this->{'ServerId'}) ) ) {
     # Local
     Logger::Debug('Trying to send options ' . print_r($options, true));
 
