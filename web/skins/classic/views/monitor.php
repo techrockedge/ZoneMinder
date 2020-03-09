@@ -639,7 +639,7 @@ switch ( $tab ) {
         </tr>
         <tr>
           <td><?php echo translate('Enabled') ?></td>
-          <td><input type="checkbox" name="newMonitor[Enabled]" value="1"<?php if ( $monitor->Enabled() ) { ?> checked="checked"<?php } ?>/></td>
+          <td><input type="checkbox" name="newMonitor[Enabled]" value="1"<?php echo $monitor->Enabled() ? ' checked="checked"' : '' ?>/></td>
         </tr>
 <?php
       if ( $monitor->Type() != 'WebSite' ) {
@@ -724,22 +724,19 @@ switch ( $tab ) {
       $breakCount = (int)(ceil(count($optTriggers)));
       $breakCount = min(3, $breakCount);
       $optCount = 0;
-      foreach( $optTriggers as $optTrigger ) {
-        if ( !ZM_OPT_X10 && $optTrigger == 'X10' )
+      foreach ( $optTriggers as $optTrigger ) {
+        if ( $optTrigger == 'X10' and !ZM_OPT_X10 )
           continue;
         if ( $optCount && ($optCount%$breakCount == 0) )
           echo '</br>';
-?>
-              <input type="checkbox" name="newMonitor[Triggers][]" value="<?php echo $optTrigger ?>"<?php if ( ( null !== $monitor->Triggers() ) && in_array( $optTrigger, $monitor->Triggers() ) ) { ?> checked="checked"<?php } ?>/>&nbsp;<?php echo $optTrigger ?>
-<?php
+        echo '<input type="checkbox" name="newMonitor[Triggers][]" value="'. $optTrigger. '"'. 
+          (( ('' !== $monitor->Triggers()) && in_array($optTrigger, $monitor->Triggers()) ) ? ' checked="checked"':''). '/> '. $optTrigger; 
           $optCount ++;
-        }
-        if ( !$optCount ) {
-        ?>
-          <em><?php echo translate('NoneAvailable') ?></em>
-          <?php
-        }
-      ?>
+      } # end foreach trigger option
+      if ( !$optCount ) {
+        echo '<em>'. translate('NoneAvailable') .'</em>';
+      }
+?>
         </td></tr>
         <?php
         }
@@ -774,7 +771,7 @@ switch ( $tab ) {
             <label for="newMonitor[V4LMultiBuffer]1">Yes</label>
             <input type="radio" name="newMonitor[V4LMultiBuffer]" id="newMonitor[V4LMultiBuffer]0" value="0" <?php echo ( $monitor->V4LMultiBuffer() == '0' ? 'checked="checked"' : '' ) ?>/>
             <label for="newMonitor[V4LMultiBuffer]0">No</label>
-            <input type="radio" name="newMonitor[V4LMultiBuffer]" id="newMonitor[V4LMultiBuffer]" value="" <?php echo ( $monitor->V4LMultiBuffer() ? 'checked="checked"' : '' ) ?>/>
+            <input type="radio" name="newMonitor[V4LMultiBuffer]" id="newMonitor[V4LMultiBuffer]" value="" <?php echo ( $monitor->V4LMultiBuffer() == '' ? 'checked="checked"' : '' ) ?>/>
             <label for="newMonitor[V4LMultiBuffer]">Use Config Value</label>
           </td></tr>
           <tr><td><?php echo translate('V4LCapturesPerFrame') ?></td><td><input type="number" name="newMonitor[V4LCapturesPerFrame]" value="<?php echo validHtmlStr($monitor->V4LCapturesPerFrame()); ?>"/></td></tr>
@@ -831,13 +828,13 @@ include('_monitor_source_nvsocket.php');
 ?>
           <tr class="DecoderHWAccelName">
             <td><?php echo translate('DecoderHWAccelName') ?>
-                (<?php echo makePopupLink('?view=optionhelp&amp;option=DECODERHWACCELNAME', 'zmOptionHelp', 'optionhelp', '?') ?>)
+                (<?php echo makePopupLink('?view=optionhelp&amp;option=OPTIONS_DECODERHWACCELNAME', 'zmOptionHelp', 'optionhelp', '?') ?>)
             </td>
             <td><input type="text" name="newMonitor[DecoderHWAccelName]" value="<?php echo validHtmlStr($monitor->DecoderHWAccelName()) ?>"/></td>
           </tr>
           <tr class="DecoderHWAccelDevice">
             <td><?php echo translate('DecoderHWAccelDevice') ?>
-                (<?php echo makePopupLink('?view=optionhelp&amp;option=DECODERHWACCELDEVIC', 'zmOptionHelp', 'optionhelp', '?') ?>)
+                (<?php echo makePopupLink('?view=optionhelp&amp;option=OPTIONS_DECODERHWACCELDEVICE', 'zmOptionHelp', 'optionhelp', '?') ?>)
             </td>
             <td><input type="text" name="newMonitor[DecoderHWAccelDevice]" value="<?php echo validHtmlStr($monitor->DecoderHWAccelDevice()) ?>"/></td>
           </tr>
@@ -901,9 +898,12 @@ if ( $monitor->Type() == 'Local' ) {
         <?php
         if ( $monitor->Type() == 'Remote' ) {
           ?>
-            <tr id="RTSPDescribe"<?php if ( $monitor->Protocol()!= 'rtsp' ) { echo ' style="display:none;"'; } ?>><td><?php echo translate('RTSPDescribe') ?>&nbsp;(<?php echo makePopupLink( '?view=optionhelp&amp;option=OPTIONS_RTSPDESCRIBE', 'zmOptionHelp', 'optionhelp', '?' ) ?>) </td><td><input type="checkbox" name="newMonitor[RTSPDescribe]" value="1"<?php if ( $monitor->RTSPDescribe() ) { ?> checked="checked"<?php } ?>/></td></tr>
+            <tr id="RTSPDescribe"<?php if ( $monitor->Protocol()!= 'rtsp' ) { echo ' style="display:none;"'; } ?>>
+              <td><?php echo translate('RTSPDescribe') ?>&nbsp;(<?php echo makePopupLink( '?view=optionhelp&amp;option=OPTIONS_RTSPDESCRIBE', 'zmOptionHelp', 'optionhelp', '?' ) ?>)</td>
+              <td><input type="checkbox" name="newMonitor[RTSPDescribe]" value="1"<?php if ( $monitor->RTSPDescribe() ) { ?> checked="checked"<?php } ?>/></td>
+            </tr>
 <?php
-      }
+      } # end if monitor->Type() == 'Remote'
       break;
     }
   case 'storage' :
@@ -913,7 +913,7 @@ if ( $monitor->Type() == 'Local' ) {
             <td>
 <?php
       $storage_areas = array(0=>'Default');
-      foreach ( ZM\Storage::find(NULL, array('order'=>'lower(Name)')) as $Storage ) {
+      foreach ( ZM\Storage::find(array('Enabled'=>true), array('order'=>'lower(Name)')) as $Storage ) {
         $storage_areas[$Storage->Id()] = $Storage->Name();
       }
       echo htmlSelect('newMonitor[StorageId]', $storage_areas, $monitor->StorageId());

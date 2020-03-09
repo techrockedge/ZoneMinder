@@ -99,7 +99,7 @@ function getPopupSize( tag, width, height ) {
 }
 
 function zmWindow(sub_url) {
-  var zmWin = window.open( 'https://www.zoneminder.com'+sub_url, 'ZoneMinder' );
+  var zmWin = window.open( 'https://www.zoneminder.com'+(sub_url?sub_url:''), 'ZoneMinder' );
   if ( ! zmWin ) {
     // if popup blocking is enabled, the popup won't be defined.
     console.log("Please disable popup blocking.");
@@ -529,4 +529,18 @@ function scaleToFit(baseWidth, baseHeight, scaleEl, bottomEl) {
   });
   autoScale = closest;
   return {width: Math.floor(newWidth), height: Math.floor(newHeight), autoScale: autoScale};
+}
+
+function setButtonState(element_id, butClass) {
+  var element = $(element_id);
+  if ( element ) {
+    element.className = butClass;
+    if (butClass == 'unavail' || (butClass == 'active' && (element.id == 'pauseBtn' || element.id == 'playBtn'))) {
+      element.disabled = true;
+    } else {
+      element.disabled = false;
+    }
+  } else {
+    console.log('Element was null or not found in setButtonState. id:'+element_id);
+  }
 }

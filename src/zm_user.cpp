@@ -27,9 +27,6 @@
 #include <string.h>
 #include <time.h>
 
-#if HAVE_GNUTLS_OPENSSL_H
-#include <gnutls/openssl.h>
-#endif
 #if HAVE_GNUTLS_GNUTLS_H
 #include <gnutls/gnutls.h>
 #endif
@@ -203,7 +200,7 @@ User *zmLoadTokenUser (std::string jwt_token_str, bool use_remote_addr ) {
       return NULL;
     }
 
-    Debug (1,"Got stored expiry time of %u",stored_iat);
+    Debug (1,"Got last token revoke time  of: %u",stored_iat);
     Debug (1,"Authenticated user '%s' via token", username.c_str());
     mysql_free_result(result);
     return user;
