@@ -75,6 +75,7 @@ public:
     FFMPEG,
     LIBVLC,
     CURL,
+    VNC,
   } CameraType;
 
   typedef enum { 
@@ -546,6 +547,9 @@ public:
 #if HAVE_LIBAVCODEC
   //void StreamMpeg( const char *format, int scale=100, int maxfps=10, int bitrate=100000 );
 #endif // HAVE_LIBAVCODEC
+  double get_fps( ) const {
+    return fps;
+  }
 };
 
 #define MOD_ADD( var, delta, limit ) (((var)+(limit)+(delta))%(limit))

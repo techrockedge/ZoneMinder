@@ -24,7 +24,7 @@ if ( !canView('Events') ) {
 }
 
 $eid = validInt($_REQUEST['eid']);
-$fid = !empty($_REQUEST['fid'])?validInt($_REQUEST['fid']):1;
+$fid = !empty($_REQUEST['fid']) ? validInt($_REQUEST['fid']) : 1;
 
 $Event = new ZM\Event($eid);
 if ( $user['MonitorIds'] ) {
@@ -79,7 +79,7 @@ $replayModes = array(
   'gapless' => translate('ReplayGapless'),
 );
 
-if ( isset( $_REQUEST['streamMode'] ) )
+if ( isset($_REQUEST['streamMode']) )
   $streamMode = validHtmlStr($_REQUEST['streamMode']);
 else
   $streamMode = 'video';
@@ -104,9 +104,15 @@ if ( $Monitor->VideoWriter() == '2' ) {
     $Zoom = $Event->Height()/$Event->Width();
 }
 
-// These are here to figure out the next/prev event, however id there is no filter, then default to one that specifies the Monitor
+// These are here to figure out the next/prev event, however if there is no filter, then default to one that specifies the Monitor
 if ( !isset($_REQUEST['filter']) ) {
-  $_REQUEST['filter'] = array( 'Query'=>array('terms'=> array( array('attr' => 'MonitorId', 'op' => '=', 'val' => $Event->MonitorId() ) ) ) );
+  $_REQUEST['filter'] = array(
+    'Query'=>array(
+      'terms'=>array(
+        array('attr'=>'MonitorId', 'op'=>'=', 'val'=>$Event->MonitorId())
+      )
+    )
+  );
 }
 parseSort();
 parseFilter($_REQUEST['filter']);
@@ -131,16 +137,16 @@ if ( !$Event->Id() ) {
 ?>
       <div id="dataBar">
         <span id="dataId" title="<?php echo translate('Id') ?>"><?php echo $Event->Id() ?></span>
-        <span id="dataMonitor" title="<?php echo translate('Monitor') ?>"><?php echo $Monitor->Id() . ' ' . $Monitor->Name() ?></span>
+        <span id="dataMonitor" title="<?php echo translate('Monitor') ?>"><?php echo $Monitor->Id().' '.validHtmlStr($Monitor->Name()) ?></span>
         <span id="dataCause" title="<?php echo $Event->Notes()?validHtmlStr($Event->Notes()):translate('AttrCause') ?>"><?php echo validHtmlStr($Event->Cause()) ?></span>
-        <span id="dataTime" title="<?php echo translate('Time') ?>"><?php echo strftime( STRF_FMT_DATETIME_SHORT, strtotime($Event->StartTime() ) ) ?></span>
+        <span id="dataTime" title="<?php echo translate('Time') ?>"><?php echo strftime(STRF_FMT_DATETIME_SHORT, strtotime($Event->StartTime())) ?></span>
         <span id="dataDuration" title="<?php echo translate('Duration') ?>"><?php echo $Event->Length().'s' ?></span>
         <span id="dataFrames" title="<?php echo translate('AttrFrames').'/'.translate('AttrAlarmFrames') ?>"><?php echo $Event->Frames() ?>/<?php echo $Event->AlarmFrames() ?></span>
         <span id="dataScore" title="<?php echo translate('AttrTotalScore').'/'.translate('AttrAvgScore').'/'.translate('AttrMaxScore') ?>"><?php echo $Event->TotScore() ?>/<?php echo $Event->AvgScore() ?>/<?php echo $Event->MaxScore() ?></span>
         <span id="Storage">
 <?php echo 
-  human_filesize($Event->DiskSpace(null)) . ' on ' . $Event->Storage()->Name().
-  ( $Event->SecondaryStorageId() ? ', ' . $Event->SecondaryStorage()->Name() :'' )
+  human_filesize($Event->DiskSpace(null)) . ' on ' . validHtmlStr($Event->Storage()->Name()).
+  ( $Event->SecondaryStorageId() ? ', '.validHtmlStr($Event->SecondaryStorage()->Name()) : '' )
 ?></span>
         <div id="closeWindow"><a href="#" onclick="<?php echo $popup ? 'window.close()' : 'window.history.back();return false;' ?>"><?php echo $popup ? translate('Close') : translate('Back') ?></a></div>
       </div>

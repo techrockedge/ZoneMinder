@@ -13,6 +13,8 @@ function Monitor(monitorData) {
   this.streamCmdParms = 'view=request&request=stream&connkey='+this.connKey;
   if ( auth_hash ) {
     this.streamCmdParms += '&auth='+auth_hash;
+  } else if ( auth_relay ) {
+    this.streamCmdParms += '&'+auth_relay;
   }
   this.streamCmdTimer = null;
   this.type = monitorData.type;
@@ -210,8 +212,8 @@ function Monitor(monitorData) {
  * @param {*} element - the event data passed by onchange callback
  */
 function selectLayout(element) {
-  console.log(element);
-  layout = $j(element).val();
+  var ddm = $j('#zmMontageLayout');
+  layout = ddm.val();
 
   if ( layout_id = parseInt(layout) ) {
     layout = layouts[layout];
@@ -221,8 +223,8 @@ function selectLayout(element) {
       // Need to clear the current positioning, and apply the new
 
       monitor_frame = $j('#monitorFrame'+monitor.id);
-      if ( ! monitor_frame ) {
-        console.log("Error finding frame for " + monitor.id);
+      if ( !monitor_frame ) {
+        console.log('Error finding frame for ' + monitor.id);
         continue;
       }
 
@@ -230,6 +232,7 @@ function selectLayout(element) {
       if ( layout.Positions['default'] ) {
         styles = layout.Positions['default'];
         for ( style in styles ) {
+          console.log("Applying " + style + ' ' + styles[style]);
           monitor_frame.css(style, styles[style]);
         }
       } else {
@@ -240,7 +243,6 @@ function selectLayout(element) {
         styles = layout.Positions['mId'+monitor.id];
         for ( style in styles ) {
           monitor_frame.css(style, styles[style]);
-          console.log("Applying " + style + ' : ' + styles[style]);
         }
       } else {
         console.log("No Monitor styles to apply");
@@ -262,6 +264,10 @@ function selectLayout(element) {
         if ( streamImg.nodeName == 'IMG' ) {
           var src = streamImg.src;
           src = src.replace(/width=[\.\d]+/i, 'width=0' );
+          if ( $j('#height').val() == 'auto' ) {
+            src = src.replace(/height=[\.\d]+/i, 'height=0' );
+            streamImg.style.height = 'auto';
+          }
           if ( src != streamImg.src ) {
             streamImg.src = '';
             streamImg.src = src;
