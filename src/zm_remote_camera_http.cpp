@@ -36,11 +36,11 @@
 #endif
 
 #if HAVE_LIBPCRE
-static RegExpr *header_expr = 0;
-static RegExpr *status_expr = 0;
-static RegExpr *connection_expr = 0;
-static RegExpr *content_length_expr = 0;
-static RegExpr *content_type_expr = 0;
+static RegExpr *header_expr = nullptr;
+static RegExpr *status_expr = nullptr;
+static RegExpr *connection_expr = nullptr;
+static RegExpr *content_length_expr = nullptr;
+static RegExpr *content_type_expr = nullptr;
 #endif
 
 RemoteCameraHttp::RemoteCameraHttp(
@@ -140,9 +140,9 @@ void RemoteCameraHttp::Initialise() {
 } // end void RemoteCameraHttp::Initialise()
 
 int RemoteCameraHttp::Connect() {
-  struct addrinfo *p = NULL;
+  struct addrinfo *p = nullptr;
 
-  for ( p = hp; p != NULL; p = p->ai_next ) {
+  for ( p = hp; p != nullptr; p = p->ai_next ) {
     sd = socket( p->ai_family, p->ai_socktype, p->ai_protocol );
     if ( sd < 0 ) {
       Warning("Can't create socket: %s", strerror(errno) );
@@ -165,7 +165,7 @@ int RemoteCameraHttp::Connect() {
     break;
   }
 
-  if ( p == NULL ) {
+  if ( p == nullptr ) {
     Error("Unable to connect to the remote camera, aborting");
     return -1;
   }
@@ -207,7 +207,7 @@ int RemoteCameraHttp::ReadData( Buffer &buffer, unsigned int bytes_expected ) {
 
   struct timeval temp_timeout = timeout;
 
-  int n_found = select(sd+1, &rfds, NULL, NULL, &temp_timeout);
+  int n_found = select(sd+1, &rfds, nullptr, nullptr, &temp_timeout);
   if( n_found == 0 ) {
     Debug( 1, "Select timed out timeout was %d secs %d usecs", temp_timeout.tv_sec, temp_timeout.tv_usec );
     int error = 0;
@@ -293,10 +293,10 @@ int RemoteCameraHttp::ReadData( Buffer &buffer, unsigned int bytes_expected ) {
 }
 
 int RemoteCameraHttp::GetData() {
-	time_t start_time = time(NULL);
+	time_t start_time = time(nullptr);
 	int buffer_len = 0;
 	while ( !( buffer_len = ReadData(buffer) ) ) {
-			if ( zm_terminate ||  ( start_time - time(NULL) < ZM_WATCH_MAX_DELAY ))
+			if ( zm_terminate ||  ( start_time - time(nullptr) < ZM_WATCH_MAX_DELAY ))
 				return -1;
 		Debug(4, "Timeout waiting for REGEXP HEADER");
 		usleep(100000);
@@ -308,16 +308,16 @@ int RemoteCameraHttp::GetResponse() {
   int buffer_len;
 #if HAVE_LIBPCRE
   if ( method == REGEXP ) {
-    const char *header = 0;
+    const char *header = nullptr;
     int header_len = 0;
-    const char *http_version = 0;
+    const char *http_version = nullptr;
     int status_code = 0;
-    const char *status_mesg = 0;
+    const char *status_mesg = nullptr;
     const char *connection_type = "";
     int content_length = 0;
     const char *content_type = "";
     const char *content_boundary = "";
-    const char *subheader = 0;
+    const char *subheader = nullptr;
     int subheader_len = 0;
     //int subcontent_length = 0;
     //const char *subcontent_type = "";
@@ -450,9 +450,9 @@ int RemoteCameraHttp::GetResponse() {
           }
         case SUBHEADER :
           {
-            static RegExpr *subheader_expr = 0;
-            static RegExpr *subcontent_length_expr = 0;
-            static RegExpr *subcontent_type_expr = 0;
+            static RegExpr *subheader_expr = nullptr;
+            static RegExpr *subcontent_length_expr = nullptr;
+            static RegExpr *subcontent_type_expr = nullptr;
 
             if ( !subheader_expr )
             {
@@ -624,8 +624,8 @@ int RemoteCameraHttp::GetResponse() {
     static char *content_type_header;
     static char *boundary_header;
     static char *authenticate_header;
-    static char subcontent_length_header[32];
-    static char subcontent_type_header[64];
+    static char subcontent_length_header[33];
+    static char subcontent_type_header[65];
 
     static char http_version[16];
     static char status_code[16];
@@ -641,11 +641,11 @@ int RemoteCameraHttp::GetResponse() {
         case HEADER :
           {
             n_headers = 0;
-            http_header = 0;
-            connection_header = 0;
-            content_length_header = 0;
-            content_type_header = 0;
-            authenticate_header = 0;
+            http_header = nullptr;
+            connection_header = nullptr;
+            content_length_header = nullptr;
+            content_type_header = nullptr;
+            authenticate_header = nullptr;
 
             http_version[0] = '\0';
             status_code [0]= '\0';
@@ -665,7 +665,7 @@ int RemoteCameraHttp::GetResponse() {
             }
 						bytes += buffer_len;
 
-            char *crlf = 0;
+            char *crlf = nullptr;
             char *header_ptr = (char *)buffer;
             int header_len = buffer.size();
             bool all_headers = false;
@@ -870,7 +870,7 @@ int RemoteCameraHttp::GetResponse() {
           }
         case SUBHEADERCONT :
           {
-            char *crlf = 0;
+            char *crlf = nullptr;
             char *subheader_ptr = (char *)buffer;
             int subheader_len = buffer.size();
             bool all_headers = false;
@@ -896,25 +896,37 @@ int RemoteCameraHttp::GetResponse() {
                 }
               }
 
-              Debug( 6, "%d: %s", subheader_len, subheader_ptr );
+              Debug(6, "%d: %s", subheader_len, subheader_ptr);
 
-              if ( (crlf = mempbrk( subheader_ptr, "\r\n", subheader_len )) ) {
+              if ( (crlf = mempbrk(subheader_ptr, "\r\n", subheader_len)) ) {
                 //subheaders[n_subheaders++] = subheader_ptr;
                 n_subheaders++;
 
-                if ( !boundary_header && (strncasecmp( subheader_ptr, content_boundary, content_boundary_len ) == 0) ) {
+                if ( !boundary_header && (strncasecmp(subheader_ptr, content_boundary, content_boundary_len) == 0) ) {
                   boundary_header = subheader_ptr;
-                  Debug( 4, "Got boundary subheader '%s'", subheader_ptr );
-                } else if ( !subcontent_length_header[0] && (strncasecmp( subheader_ptr, content_length_match, content_length_match_len) == 0) ) {
-                  strncpy( subcontent_length_header, subheader_ptr+content_length_match_len, sizeof(subcontent_length_header) );
-                  *(subcontent_length_header+strcspn( subcontent_length_header, "\r\n" )) = '\0';
-                  Debug( 4, "Got content length subheader '%s'", subcontent_length_header );
+                  Debug(4, "Got boundary subheader '%s'", subheader_ptr);
+                } else if (
+                    !subcontent_length_header[0]
+                    &&
+                    (strncasecmp(subheader_ptr, content_length_match, content_length_match_len) == 0)
+                    ) {
+                  strncpy(
+                      subcontent_length_header,
+                      subheader_ptr+content_length_match_len,
+                      sizeof(subcontent_length_header)-1
+                      );
+                  *(subcontent_length_header+strcspn(subcontent_length_header, "\r\n")) = '\0';
+                  Debug(4, "Got content length subheader '%s'", subcontent_length_header);
                 } else if ( !subcontent_type_header[0] && (strncasecmp( subheader_ptr, content_type_match, content_type_match_len) == 0) ) {
-                  strncpy( subcontent_type_header, subheader_ptr+content_type_match_len, sizeof(subcontent_type_header) );
-                  *(subcontent_type_header+strcspn( subcontent_type_header, "\r\n" )) = '\0';
-                  Debug( 4, "Got content type subheader '%s'", subcontent_type_header );
+                  strncpy(
+                      subcontent_type_header,
+                      subheader_ptr+content_type_match_len,
+                      sizeof(subcontent_type_header)-1
+                      );
+                  *(subcontent_type_header+strcspn(subcontent_type_header, "\r\n")) = '\0';
+                  Debug(4, "Got content type subheader '%s'", subcontent_type_header);
                 } else {
-                  Debug( 6, "Got ignored subheader '%s' found", subheader_ptr );
+                  Debug(6, "Got ignored subheader '%s' found", subheader_ptr);
                 }
                 subheader_ptr = crlf;
                 subheader_len -= buffer.consume( subheader_ptr-(char *)buffer );
@@ -1055,6 +1067,18 @@ int RemoteCameraHttp::GetResponse() {
     }
   }
   return( 0 );
+}
+
+int RemoteCameraHttp::PrimeCapture() {
+  if ( sd < 0 ) {
+    Connect();
+    if ( sd < 0 ) {
+      return -1;
+    }
+    mode = SINGLE_IMAGE;
+    buffer.clear();
+  }
+  return 0;
 }
 
 int RemoteCameraHttp::PreCapture() {

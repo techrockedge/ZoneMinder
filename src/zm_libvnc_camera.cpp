@@ -50,7 +50,7 @@ static rfbCredential* GetCredentialsCallback(rfbClient* cl, int credentialType){
   rfbCredential *c = (rfbCredential *)malloc(sizeof(rfbCredential));
   if ( credentialType != rfbCredentialTypeUser ) {
       free(c);
-      return NULL;
+      return nullptr;
   }
 
   c->userCredential.password = strdup((const char *)(*rfbClientGetClientData_f)(cl, &TAG_1));
@@ -148,7 +148,7 @@ void VncCamera::Terminate() {
 }
 
 int VncCamera::PrimeCapture() {
-  Info("Priming capture from %s", mHost.c_str());
+  Debug(1, "Priming capture from %s", mHost.c_str());
   return 0;
 }
 

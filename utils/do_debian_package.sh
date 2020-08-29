@@ -80,7 +80,7 @@ fi;
 
 if [ "$DISTROS" == "" ]; then
   if [ "$RELEASE" != "" ]; then
-    DISTROS="xenial,bionic,eoan,focal"
+    DISTROS="xenial,bionic,focal"
   else
     DISTROS=`lsb_release -a 2>/dev/null | grep Codename | awk '{print $2}'`;
   fi;
@@ -227,12 +227,11 @@ IFS=',' ;for DISTRO in `echo "$DISTROS"`; do
   # Generate Changlog
   if [ "$DISTRO" == "focal" ] || [ "$DISTRO" == "buster" ]; then 
     cp -Rpd distros/ubuntu2004 debian
-  else 
-    if [ "$DISTRO" == "wheezy" ]; then 
-      cp -Rpd distros/debian debian
-    else 
-      cp -Rpd distros/ubuntu1604 debian
-    fi;
+  elif [ "$DISTRO" == "beowulf" ]
+  then
+    cp -Rpd distros/beowulf debian
+  else
+    cp -Rpd distros/ubuntu1604 debian
   fi;
 
   if [ "$DEBEMAIL" != "" ] && [ "$DEBFULLNAME" != "" ]; then

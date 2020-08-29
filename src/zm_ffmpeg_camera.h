@@ -45,6 +45,8 @@ class FfmpegCamera : public Camera {
     std::string         hwaccel_device;
 
     int frameCount;    
+  
+    int alignment;      /* ffmpeg wants line sizes to be 32bit aligned.  Especially 4.3+ */
 
 #if HAVE_LIBAVFORMAT
     AVFormatContext     *mFormatContext;
@@ -62,7 +64,7 @@ class FfmpegCamera : public Camera {
     AVFrame             *hwFrame; // Will also be used to indicate if hwaccel is in use
     bool                use_hwaccel; //will default to on if hwaccel specified, will get turned off if there is a failure
 #if HAVE_LIBAVUTIL_HWCONTEXT_H
-    AVBufferRef *hw_device_ctx = NULL;
+    AVBufferRef *hw_device_ctx = nullptr;
 #endif
 
     // Used to store the incoming packet, it will get copied when queued. 
@@ -82,6 +84,7 @@ class FfmpegCamera : public Camera {
 #if HAVE_LIBSWSCALE
     struct SwsContext   *mConvertContext;
 #endif
+    uint8_t *frame_buffer;
 
     int                 error_count;
 

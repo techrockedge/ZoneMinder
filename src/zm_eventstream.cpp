@@ -148,7 +148,7 @@ bool EventStream::loadEventData(uint64_t event_id) {
 
   event_data->monitor_id = atoi(dbrow[0]);
   event_data->storage_id = dbrow[1] ? atoi(dbrow[1]) : 0;
-  event_data->frame_count = dbrow[2] == NULL ? 0 : atoi(dbrow[2]);
+  event_data->frame_count = dbrow[2] == nullptr ? 0 : atoi(dbrow[2]);
   event_data->start_time = atoi(dbrow[3]);
   event_data->duration = dbrow[4] ? atof(dbrow[4]) : 0.0;
   strncpy(event_data->video_file, dbrow[5], sizeof(event_data->video_file)-1);
@@ -160,8 +160,8 @@ bool EventStream::loadEventData(uint64_t event_id) {
   } else {
     event_data->scheme = Storage::SHALLOW;
   }
-  event_data->SaveJPEGs = dbrow[7] == NULL ? 0 : atoi(dbrow[7]);
-  event_data->Orientation = (Monitor::Orientation)(dbrow[8] == NULL ? 0 : atoi(dbrow[8]));
+  event_data->SaveJPEGs = dbrow[7] == nullptr ? 0 : atoi(dbrow[7]);
+  event_data->Orientation = (Monitor::Orientation)(dbrow[8] == nullptr ? 0 : atoi(dbrow[8]));
   mysql_free_result(result);
 
   if ( !monitor ) {
@@ -187,13 +187,13 @@ bool EventStream::loadEventData(uint64_t event_id) {
 
     if ( storage_path[0] == '/' )
       snprintf(event_data->path, sizeof(event_data->path),
-          "%s/%ld/%02d/%02d/%02d/%02d/%02d/%02d",
+          "%s/%d/%02d/%02d/%02d/%02d/%02d/%02d",
           storage_path, event_data->monitor_id,
           event_time->tm_year-100, event_time->tm_mon+1, event_time->tm_mday,
           event_time->tm_hour, event_time->tm_min, event_time->tm_sec);
     else
       snprintf(event_data->path, sizeof(event_data->path),
-          "%s/%s/%ld/%02d/%02d/%02d/%02d/%02d/%02d",
+          "%s/%s/%d/%02d/%02d/%02d/%02d/%02d/%02d",
           staticConfig.PATH_WEB.c_str(), storage_path, event_data->monitor_id,
           event_time->tm_year-100, event_time->tm_mon+1, event_time->tm_mday,
           event_time->tm_hour, event_time->tm_min, event_time->tm_sec);
@@ -201,23 +201,23 @@ bool EventStream::loadEventData(uint64_t event_id) {
     struct tm *event_time = localtime(&event_data->start_time);
     if ( storage_path[0] == '/' )
       snprintf(event_data->path, sizeof(event_data->path),
-          "%s/%ld/%04d-%02d-%02d/%" PRIu64,
+          "%s/%d/%04d-%02d-%02d/%" PRIu64,
           storage_path, event_data->monitor_id,
           event_time->tm_year+1900, event_time->tm_mon+1, event_time->tm_mday,
           event_data->event_id);
     else
       snprintf(event_data->path, sizeof(event_data->path),
-          "%s/%s/%ld/%04d-%02d-%02d/%" PRIu64,
+          "%s/%s/%d/%04d-%02d-%02d/%" PRIu64,
           staticConfig.PATH_WEB.c_str(), storage_path, event_data->monitor_id,
           event_time->tm_year+1900, event_time->tm_mon+1, event_time->tm_mday, 
           event_data->event_id);
 
   } else {
     if ( storage_path[0] == '/' )
-      snprintf(event_data->path, sizeof(event_data->path), "%s/%ld/%" PRIu64,
+      snprintf(event_data->path, sizeof(event_data->path), "%s/%d/%" PRIu64,
           storage_path, event_data->monitor_id, event_data->event_id);
     else
-      snprintf(event_data->path, sizeof(event_data->path), "%s/%s/%ld/%" PRIu64, 
+      snprintf(event_data->path, sizeof(event_data->path), "%s/%s/%d/%" PRIu64, 
           staticConfig.PATH_WEB.c_str(), storage_path, event_data->monitor_id,
           event_data->event_id);
   }
@@ -303,7 +303,7 @@ bool EventStream::loadEventData(uint64_t event_id) {
     if ( 0 > ffmpeg_input->Open(filepath.c_str()) ) {
       Warning("Unable to open ffmpeg_input %s", filepath.c_str());
       delete ffmpeg_input;
-      ffmpeg_input = NULL;
+      ffmpeg_input = nullptr;
     }
   }
 
@@ -566,11 +566,11 @@ bool EventStream::checkEventLoaded() {
 
   if ( curr_frame_id <= 0 ) {
     snprintf(sql, sizeof(sql),
-        "SELECT `Id` FROM `Events` WHERE `MonitorId` = %ld AND `Id` < %" PRIu64 " ORDER BY `Id` DESC LIMIT 1",
+        "SELECT `Id` FROM `Events` WHERE `MonitorId` = %d AND `Id` < %" PRIu64 " ORDER BY `Id` DESC LIMIT 1",
         event_data->monitor_id, event_data->event_id);
   } else if ( (unsigned int)curr_frame_id > event_data->frame_count ) {
     snprintf(sql, sizeof(sql),
-        "SELECT `Id` FROM `Events` WHERE `MonitorId` = %ld AND `Id` > %" PRIu64 " ORDER BY `Id` ASC LIMIT 1",
+        "SELECT `Id` FROM `Events` WHERE `MonitorId` = %d AND `Id` > %" PRIu64 " ORDER BY `Id` ASC LIMIT 1",
         event_data->monitor_id, event_data->event_id);
   } else {
     // No event change required
@@ -646,7 +646,7 @@ bool EventStream::sendFrame(int delta_us) {
 
   static char filepath[PATH_MAX];
   static struct stat filestat;
-  FILE *fdj = NULL;
+  FILE *fdj = nullptr;
 
   // This needs to be abstracted.  If we are saving jpgs, then load the capture file.
   // If we are only saving analysis frames, then send that.
@@ -711,7 +711,7 @@ bool EventStream::sendFrame(int delta_us) {
       img_buffer_size = fread(img_buffer, 1, sizeof(temp_img_buffer), fdj);
 #endif
     } else {
-      Image *image = NULL;
+      Image *image = nullptr;
 
       if ( filepath[0] ) {
         image = new Image(filepath);
@@ -790,7 +790,7 @@ bool EventStream::sendFrame(int delta_us) {
           break;
       }
       delete image;
-      image = NULL;
+      image = nullptr;
     } // end if send_raw or not
 
     switch ( type ) {
@@ -810,30 +810,40 @@ bool EventStream::sendFrame(int delta_us) {
 
     if ( send_raw ) {
 #if HAVE_SENDFILE
-      fprintf(stdout, "Content-Length: %d\r\n\r\n", (int)filestat.st_size);
+      if ( 0 > fprintf(stdout, "Content-Length: %d\r\n\r\n", (int)filestat.st_size) ) {
+        fclose(fdj); /* Close the file handle */
+        Info("Unable to send raw frame %u: %s", curr_frame_id, strerror(errno));
+        return false;
+      }
       if ( zm_sendfile(fileno(stdout), fileno(fdj), 0, (int)filestat.st_size) != (int)filestat.st_size ) {
         /* sendfile() failed, use standard way instead */
         img_buffer_size = fread(img_buffer, 1, sizeof(temp_img_buffer), fdj);
         if ( fwrite(img_buffer, img_buffer_size, 1, stdout) != 1 ) {
           fclose(fdj); /* Close the file handle */
-          Error("Unable to send raw frame %u: %s", curr_frame_id, strerror(errno));
+          Info("Unable to send raw frame %u: %s", curr_frame_id, strerror(errno));
           return false;
         }
       }
 #else
-      fprintf(stdout, "Content-Length: %d\r\n\r\n", img_buffer_size);
-      if ( fwrite(img_buffer, img_buffer_size, 1, stdout) != 1 ) {
+      if ( 
+          (0 > fprintf(stdout, "Content-Length: %d\r\n\r\n", img_buffer_size) )
+          ||
+          ( fwrite(img_buffer, img_buffer_size, 1, stdout) != 1 )
+         ) {
         fclose(fdj); /* Close the file handle */
-        Error("Unable to send raw frame %u: %s", curr_frame_id, strerror(errno));
+        Info("Unable to send raw frame %u: %s", curr_frame_id, strerror(errno));
         return false;
       }
 #endif
       fclose(fdj); /* Close the file handle */
     } else {
       Debug(3, "Content length: %d", img_buffer_size);
-      fprintf(stdout, "Content-Length: %d\r\n\r\n", img_buffer_size);
-      if ( fwrite(img_buffer, img_buffer_size, 1, stdout) != 1 ) {
-        Error("Unable to send stream frame: %s", strerror(errno));
+      if ( 
+          (0 > fprintf(stdout, "Content-Length: %d\r\n\r\n", img_buffer_size) )
+          ||
+          ( fwrite(img_buffer, img_buffer_size, 1, stdout) != 1 ) )  {
+        if ( errno != EPIPE )
+          Error("Unable to send stream frame: %s", strerror(errno));
         return false;
       }
     }  // end if send_raw or not
@@ -860,7 +870,7 @@ void EventStream::runStream() {
 
   Debug(3, "frame rate is: (%f)", (double)event_data->frame_count/event_data->duration);
   updateFrameRate((double)event_data->frame_count/event_data->duration);
-  gettimeofday(&start, NULL);
+  gettimeofday(&start, nullptr);
   uint64_t start_usec = start.tv_sec * 1000000 + start.tv_usec;
   uint64_t last_frame_offset = 0;
 
@@ -868,7 +878,7 @@ void EventStream::runStream() {
   double time_to_event = 0;
 
   while ( !zm_terminate ) {
-    gettimeofday(&now, NULL);
+    gettimeofday(&now, nullptr);
 
     int delta_us = 0;
     send_frame = false;
@@ -972,7 +982,7 @@ void EventStream::runStream() {
       // +/- 1? What if we are skipping frames?
       curr_frame_id += (replay_rate>0) ? frame_mod : -1*frame_mod;
       // sending the frame may have taken some time, so reload now
-      gettimeofday(&now, NULL);
+      gettimeofday(&now, nullptr);
       uint64_t now_usec = (now.tv_sec * 1000000 + now.tv_usec);
 
       // we incremented by replay_rate, so might have jumped past frame_count

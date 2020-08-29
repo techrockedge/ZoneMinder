@@ -1,4 +1,5 @@
 var optControl = <?php echo ZM_OPT_CONTROL ?>;
+var hasOnvif = <?php echo ZM_HAS_ONVIF ?>;
 var defaultAspectRatio = '<?php echo ZM_DEFAULT_ASPECT_RATIO ?>';
 
 <?php
@@ -157,6 +158,7 @@ function updateMethods(element) {
   switch ( element.value ) {
     case 'http' :
       <?php
+        global $httpMethods;
         foreach( $httpMethods as $value=>$label ) {
           ?>
             methodSelector.options[methodSelector.options.length] = new Option("<?php echo htmlspecialchars($label) ?>", "<?php echo $value ?>");
@@ -168,6 +170,7 @@ function updateMethods(element) {
           break;
     case 'rtsp' :
       <?php
+        global $rtspMethods;
         foreach( $rtspMethods as $value=>$label ) {
           ?>
             methodSelector.options[methodSelector.options.length] = new Option( "<?php echo htmlspecialchars($label) ?>", "<?php echo $value ?>" );

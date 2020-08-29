@@ -76,9 +76,9 @@ bool MonitorStream::checkSwapPath(const char *path, bool create_path) {
 } // end bool MonitorStream::checkSwapPath( const char *path, bool create_path )
 
 void MonitorStream::processCommand(const CmdMsg *msg) {
-  Debug( 2, "Got message, type %d, msg %d", msg->msg_type, msg->msg_data[0] );
+  Debug(2, "Got message, type %d, msg %d", msg->msg_type, msg->msg_data[0]);
   // Check for incoming command
-  switch( (MsgCommand)msg->msg_data[0] ) {
+  switch ( (MsgCommand)msg->msg_data[0] ) {
     case CMD_PAUSE :
       Debug(1, "Got PAUSE command");
       paused = true;
@@ -315,7 +315,7 @@ bool MonitorStream::sendFrame(const char *filepath, struct timeval *timestamp) {
     int img_buffer_size = 0;
     static unsigned char img_buffer[ZM_MAX_IMAGE_SIZE];
 
-    FILE *fdj = NULL;
+    FILE *fdj = nullptr;
     if ( (fdj = fopen(filepath, "r")) ) {
       img_buffer_size = fread(img_buffer, 1, sizeof(img_buffer), fdj);
       fclose(fdj);
@@ -326,13 +326,14 @@ bool MonitorStream::sendFrame(const char *filepath, struct timeval *timestamp) {
 
     // Calculate how long it takes to actually send the frame
     struct timeval frameStartTime;
-    gettimeofday(&frameStartTime, NULL);
+    gettimeofday(&frameStartTime, nullptr);
 
-    fputs("--" BOUNDARY "\r\nContent-Type: image/jpeg\r\n", stdout);
-    fprintf(stdout, "Content-Length: %d\r\n"
-        "X-Timestamp: %d.%06d\r\n"
-        "\r\n", img_buffer_size, (int)timestamp->tv_sec, (int)timestamp->tv_usec);
-    if ( fwrite(img_buffer, img_buffer_size, 1, stdout) != 1 ) {
+    if (
+        (0 > fprintf(stdout, "Content-Length: %d\r\nX-Timestamp: %d.%06d\r\n\r\n",
+                     img_buffer_size, (int)timestamp->tv_sec, (int)timestamp->tv_usec))
+        ||
+        (fwrite(img_buffer, img_buffer_size, 1, stdout) != 1)
+       ) {
       if ( !zm_terminate )
         Warning("Unable to send stream frame: %s", strerror(errno));
       return false;
@@ -341,7 +342,7 @@ bool MonitorStream::sendFrame(const char *filepath, struct timeval *timestamp) {
     fflush(stdout);
 
     struct timeval frameEndTime;
-    gettimeofday(&frameEndTime, NULL);
+    gettimeofday(&frameEndTime, nullptr);
 
     int frameSendTime = tvDiffMsec(frameStartTime, frameEndTime);
     if ( frameSendTime > 1000/maxfps ) {
@@ -385,9 +386,10 @@ bool MonitorStream::sendFrame(Image *image, struct timeval *timestamp) {
 
     // Calculate how long it takes to actually send the frame
     struct timeval frameStartTime;
-    gettimeofday(&frameStartTime, NULL);
+    gettimeofday(&frameStartTime, nullptr);
 
-    switch( type ) {
+    fputs("--ZoneMinderFrame\r\n", stdout);
+    switch ( type ) {
       case STREAM_JPEG :
         send_image->EncodeJpeg(img_buffer, &img_buffer_size);
         fputs("Content-Type: image/jpeg\r\n", stdout);
@@ -412,10 +414,12 @@ bool MonitorStream::sendFrame(Image *image, struct timeval *timestamp) {
         Error("Unexpected frame type %d", type);
         return false;
     }
-    fprintf(stdout, "Content-Length: %d\r\n"
-        "X-Timestamp: %d.%06d\r\n"
-        "\r\n", img_buffer_size, (int)timestamp->tv_sec, (int)timestamp->tv_usec);
-    if ( fwrite(img_buffer, img_buffer_size, 1, stdout) != 1 ) {
+    if (
+        ( 0 > fprintf(stdout, "Content-Length: %d\r\nX-Timestamp: %d.%06d\r\n\r\n",
+                      img_buffer_size, (int)timestamp->tv_sec, (int)timestamp->tv_usec) )
+        ||
+        (fwrite(img_buffer, img_buffer_size, 1, stdout) != 1)
+       ) {
       if ( !zm_terminate ) {
         // If the pipe was closed, we will get signalled SIGPIPE to exit, which will set zm_terminate
         Warning("Unable to send stream frame: %s", strerror(errno));
@@ -426,7 +430,7 @@ bool MonitorStream::sendFrame(Image *image, struct timeval *timestamp) {
     fflush(stdout);
 
     struct timeval frameEndTime;
-    gettimeofday(&frameEndTime, NULL);
+    gettimeofday(&frameEndTime, nullptr);
 
     int frameSendTime = tvDiffMsec(frameStartTime, frameEndTime);
     if ( frameSendTime > 1000/maxfps ) {
@@ -466,7 +470,7 @@ void MonitorStream::runStream() {
 
   frame_count = 0;
 
-  temp_image_buffer = 0;
+  temp_image_buffer = nullptr;
   temp_image_buffer_count = playback_buffer;
   temp_read_index = temp_image_buffer_count;
   temp_write_index = temp_image_buffer_count;
@@ -475,7 +479,7 @@ void MonitorStream::runStream() {
   bool buffered_playback = false;
 
   // Last image and timestamp when paused, will be resent occasionally to prevent timeout
-  Image *paused_image = NULL;
+  Image *paused_image = nullptr;
   struct timeval paused_timestamp;
 
   if ( connkey && ( playback_buffer > 0 ) ) {
@@ -483,8 +487,8 @@ void MonitorStream::runStream() {
     const int max_swap_len_suffix = 15;
 
     int swap_path_length = staticConfig.PATH_SWAP.length() + 1; // +1 for NULL terminator
-    int subfolder1_length = snprintf(NULL, 0, "/zmswap-m%d", monitor->Id()) + 1;
-    int subfolder2_length = snprintf(NULL, 0, "/zmswap-q%06d", connkey) + 1;
+    int subfolder1_length = snprintf(nullptr, 0, "/zmswap-m%d", monitor->Id()) + 1;
+    int subfolder2_length = snprintf(nullptr, 0, "/zmswap-q%06d", connkey) + 1;
     int total_swap_path_length = swap_path_length + subfolder1_length + subfolder2_length;
 
     if ( total_swap_path_length + max_swap_len_suffix > PATH_MAX ) {
@@ -541,7 +545,7 @@ void MonitorStream::runStream() {
       break;
     }
 
-    gettimeofday(&now, NULL);
+    gettimeofday(&now, nullptr);
 
     bool was_paused = paused;
     if ( connkey ) {
@@ -567,7 +571,7 @@ void MonitorStream::runStream() {
     } else if ( paused_image ) {
       Debug(1, "Clearing paused_image");
       delete paused_image;
-      paused_image = NULL;
+      paused_image = nullptr;
     }
 
     if ( buffered_playback && delayed ) {
