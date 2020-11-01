@@ -24,7 +24,7 @@ if ( ! canEdit('Monitors') ) {
   return;
 }
 
-if ( $action == 'monitor' ) {
+if ( $action == 'save' ) {
   $mid = 0;
   if ( !empty($_REQUEST['mid']) ) {
     $mid = validInt($_REQUEST['mid']);
@@ -75,10 +75,10 @@ if ( $action == 'monitor' ) {
   if ( $_REQUEST['newMonitor']['ServerId'] == 'auto' ) {
     $_REQUEST['newMonitor']['ServerId'] = dbFetchOne(
       'SELECT Id FROM Servers WHERE Status=\'Running\' ORDER BY FreeMem DESC, CpuLoad ASC LIMIT 1', 'Id');
-    ZM\Logger::Debug('Auto selecting server: Got ' . $_REQUEST['newMonitor']['ServerId']);
+    ZM\Debug('Auto selecting server: Got ' . $_REQUEST['newMonitor']['ServerId']);
     if ( ( !$_REQUEST['newMonitor'] ) and defined('ZM_SERVER_ID') ) {
       $_REQUEST['newMonitor']['ServerId'] = ZM_SERVER_ID;
-      ZM\Logger::Debug('Auto selecting server to ' . ZM_SERVER_ID);
+      ZM\Debug('Auto selecting server to ' . ZM_SERVER_ID);
     }
   }
 
@@ -235,7 +235,7 @@ if ( $action == 'monitor' ) {
 
     $restart = true;
   } else {
-    ZM\Logger::Debug('No action due to no changes to Monitor');
+    ZM\Debug('No action due to no changes to Monitor');
   } # end if count(changes)
 
   if ( !$mid ) {
@@ -273,7 +273,7 @@ if ( $action == 'monitor' ) {
     // really should thump zmwatch and maybe zmtrigger too.
     //daemonControl( 'restart', 'zmwatch.pl' );
   } // end if restart
-  $view = 'console';
+  $redirect = '?view=console';
 } else {
   ZM\Warning("Unknown action $action in Monitor");
 } // end if action == Delete

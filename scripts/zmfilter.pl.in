@@ -98,6 +98,7 @@ use constant EVENT_PATH => ($Config{ZM_DIR_EVENTS}=~m|/|)
   ;
 
 logInit($filter_id?(id=>'zmfilter_'.$filter_id):());
+
 sub HupHandler {
   # This idea at this time is to just exit, freeing up the memory. 
   # zmfilter.pl will be respawned by zmdc.
@@ -236,6 +237,7 @@ sub getFilters {
     $sql .= ' `Background` = 1 AND';
   }
   $sql .= '( `AutoArchive` = 1
+    or `AutoUnarchive` = 1
     or `AutoVideo` = 1
     or `AutoUpload` = 1
     or `AutoEmail` = 1
@@ -275,6 +277,7 @@ FILTER: while( my $db_filter = $sth->fetchrow_hashref() ) {
 sub checkFilter {
   my $filter = shift;
 
+  my $in_transaction = ZoneMinder::Database::start_transaction($dbh) if $$filter{LockRows}; 
   my @Events = $filter->Execute();
   Debug(
       join(' ',
@@ -282,6 +285,7 @@ sub checkFilter {
         join(', ', 
           ($filter->{AutoDelete}?'delete':()),
           ($filter->{AutoArchive}?'archive':()),
+          ($filter->{AutoUnarchive}?'unarchive':()),
           ($filter->{AutoVideo}?'video':()),
           ($filter->{AutoUpload}?'upload':()),
           ($filter->{AutoEmail}?'email':()),
@@ -299,13 +303,22 @@ sub checkFilter {
     last if $zm_terminate;
     my $Event = new ZoneMinder::Event($$event{Id}, $event);
 
-    Debug("Checking event $Event->{Id}");
+    Debug('Checking event '.$Event->{Id});
     my $delete_ok = !undef;
     $dbh->ping();
     if ( $filter->{AutoArchive} ) {
       Info("Archiving event $Event->{Id}");
       # Do it individually to avoid locking up the table for new events
       my $sql = 'UPDATE `Events` SET `Archived` = 1 WHERE `Id` = ?';
+      my $sth = $dbh->prepare_cached($sql)
+        or Fatal("Unable to prepare '$sql': ".$dbh->errstr());
+      my $res = $sth->execute($Event->{Id})
+        or Error("Unable to execute '$sql': ".$dbh->errstr());
+    }
+    if ( $filter->{AutoUnarchive} ) {
+      Info("Unarchiving event $Event->{Id}");
+      # Do it individually to avoid locking up the table for new events
+      my $sql = 'UPDATE `Events` SET `Archived` = 0 WHERE `Id` = ?';
       my $sth = $dbh->prepare_cached($sql)
         or Fatal("Unable to prepare '$sql': ".$dbh->errstr());
       my $res = $sth->execute($Event->{Id})
@@ -384,6 +397,7 @@ sub checkFilter {
       $ZoneMinder::Database::dbh->commit();
     } # end if UpdateDiskSpace
   } # end foreach event
+  ZoneMinder::Database::end_transaction($dbh, $in_transaction) if $$filter{LockRows}; 
 } # end sub checkFilter
 
 sub generateVideo {
@@ -691,6 +705,7 @@ sub substituteTags {
   $text =~ s/%EC%/$Event->{Cause}/g;
   $text =~ s/%ED%/$Event->{Notes}/g;
   $text =~ s/%ET%/$Event->{StartTime}/g;
+  $text =~ s/%EVF%/$$Event{DefaultVideo}/g; # Event video filename
   $text =~ s/%EL%/$Event->{Length}/g;
   $text =~ s/%EF%/$Event->{Frames}/g;
   $text =~ s/%EFA%/$Event->{AlarmFrames}/g;
@@ -1017,8 +1032,7 @@ sub executeCommand {
 
   my $event_path = $Event->Path();
 
-  my $command = $filter->{AutoExecuteCmd};
-  $command .= " $event_path";
+  my $command = $filter->{AutoExecuteCmd}.' '.$event_path;
   $command = substituteTags($command, $filter, $Event);
 
   Info("Executing '$command'");

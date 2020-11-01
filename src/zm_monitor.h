@@ -88,6 +88,7 @@ public:
   } Orientation;
 
   typedef enum {
+    UNKNOWN=-1,
     IDLE,
     PREALARM,
     ALARM,
@@ -425,7 +426,7 @@ public:
   bool connect();
 
   inline int ShmValid() const {
-    return shared_data->valid;
+    return shared_data && shared_data->valid;
   }
 
   inline unsigned int Id() const {
@@ -503,6 +504,8 @@ public:
   TriggerState GetTriggerState() const { return (TriggerState)(trigger_data?trigger_data->trigger_state:TRIGGER_CANCEL); }
 	inline time_t getStartupTime() const { return shared_data->startup_time; }
 	inline void setStartupTime( time_t p_time ) { shared_data->startup_time = p_time; }
+
+  int LabelSize() { return label_size; }
 
   void actionReload();
   void actionEnable();

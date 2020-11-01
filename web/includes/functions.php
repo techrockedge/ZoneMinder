@@ -79,14 +79,12 @@ function CSPHeaders($view, $nonce) {
     case 'storage':
     case 'version': {
       // Enforce script-src on pages where inline scripts and event handlers have been fixed.
-      // 'unsafe-inline' is only for backwards compatibility with browsers which
-      // only support CSP 1 (with no nonce-* support).
-      header("Content-Security-Policy: script-src 'unsafe-inline' 'self' 'nonce-$nonce' $additionalScriptSrc");
+      header("Content-Security-Policy: script-src 'self' 'nonce-$nonce' $additionalScriptSrc");
       break;
     }
     default: {
       // Use Report-Only mode on all other pages.
-      header("Content-Security-Policy-Report-Only: script-src 'unsafe-inline' 'self' 'nonce-$nonce' $additionalScriptSrc;".
+      header("Content-Security-Policy-Report-Only: script-src 'self' 'nonce-$nonce' $additionalScriptSrc;".
         (ZM_CSP_REPORT_URI ? ' report-uri '.ZM_CSP_REPORT_URI : '' )
       );
       break;
@@ -106,7 +104,7 @@ function CORSHeaders() {
 # Only need CORSHeaders in the event that there are multiple servers in use.
       # ICON: Might not be true. multi-port?
       if ( ZM_MIN_STREAMING_PORT ) {
-        ZM\Logger::Debug('Setting default Access-Control-Allow-Origin from ' . $_SERVER['HTTP_ORIGIN']);
+        ZM\Debug('Setting default Access-Control-Allow-Origin from ' . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Headers: x-requested-with,x-request');
       }
@@ -119,7 +117,7 @@ function CORSHeaders() {
         preg_match('/^(https?:\/\/)?'.preg_quote($Server->Name(),'/').'/i', $_SERVER['HTTP_ORIGIN'])
       ) {
         $valid = true;
-        ZM\Logger::Debug('Setting Access-Control-Allow-Origin from '.$_SERVER['HTTP_ORIGIN']);
+        ZM\Debug('Setting Access-Control-Allow-Origin from '.$_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Headers: x-requested-with,x-request');
         break;
@@ -178,7 +176,7 @@ function getVideoStreamHTML($id, $src, $width, $height, $format, $title='') {
         $mimeType = 'video/3gpp';
         break;
       default :
-        $mimeType = "video/$format";
+        $mimeType = 'video/'.$format;
         break;
     }
   }
@@ -336,7 +334,7 @@ function getWebSiteUrl($id, $src, $width, $height, $title='') {
     if ( array_key_exists('X-Frame-Options', $header) ) {
       $header = $header['X-Frame-Options'];
       if ( stripos($header, 'sameorigin') === 0 )
-        ZM\Warning("Web site $src has X-Frame-Options set to sameorigin. An X-Frame-Options browser plugin is required to display this site.");
+        ZM\Warning('Web site '.$src.' has X-Frame-Options set to sameorigin. An X-Frame-Options browser plugin is required to display this site.');
     }
   }
   return '<object id="'.$id.'" data="'.$src.'" alt="'.$title.'" width="'.$width.'" height="'.$height.'"></object>';
@@ -394,7 +392,7 @@ function getEventDefaultVideoPath($event) {
 }
 
 function deletePath( $path ) {
-  ZM\Logger::Debug("Deleting $path");
+  ZM\Debug('Deleting '.$path);
   if ( is_dir($path) ) {
     system(escapeshellcmd('rm -rf '.$path));
   } else if ( file_exists($path) ) {
@@ -412,22 +410,23 @@ function deleteEvent($event) {
   if ( gettype($event) != 'array' ) {
 # $event could be an eid, so turn it into an event hash
     $event = new ZM\Event($event);
-  } else {
-ZM\Logger::Debug("Event type: " . gettype($event));
   }
-
-  global $user;
 
   if ( $event->Archived() ) {
     ZM\Info('Cannot delete Archived event.');
     return;
   } # end if Archived
 
+  global $user;
+
   if ( $user['Events'] == 'Edit' ) {
     $event->delete();
   } # CAN EDIT
 }
 
+/**
+ * $label must be already escaped. It can't be done here since it sometimes contains HTML tags.
+ */
 function makeLink($url, $label, $condition=1, $options='') {
   $string = '';
   if ( $condition ) {
@@ -440,47 +439,20 @@ function makeLink($url, $label, $condition=1, $options='') {
   return $string;
 }
 
-/**
- * $label must be already escaped. It can't be done here since it sometimes contains HTML tags.
- */
-function makePopupLink($url, $winName, $winSize, $label, $condition=1, $options='') {
-  // Avoid double-encoding since some consumers incorrectly pass a pre-escaped URL.
-  $string = '<a';
-  if ( $condition ) {
-    $string .= ' class="popup-link" href="' . htmlspecialchars($url, ENT_COMPAT | ENT_HTML401, ini_get('default_charset'), false) . '"';
-    $string .= ' data-window-name="' . htmlspecialchars($winName) . '"';
-    if ( is_array( $winSize ) ) {
-      $string .= ' data-window-tag="' . htmlspecialchars($winSize[0]) . '"';
-      $string .= ' data-window-width="' . htmlspecialchars($winSize[1]) . '"';
-      $string .= ' data-window-height="' . htmlspecialchars($winSize[2]) . '"';
-    } else {
-      $string .= ' data-window-tag="' . htmlspecialchars($winSize) . '"';
-    }
+//Make it slightly easier to create a link to help text modal
+function makeHelpLink($ohndx) {
+  $string = '&nbsp;(<a id="' .$ohndx. '" class="optionhelp" href="#">?</a>)';
 
-    $string .= ($options ? (' ' . $options ) : '') . '>';
-  } else {
-    $string .= '>';
-  }
-  $string .= $label;
-  $string .= '</a>';
   return $string;
 }
 
-function makePopupButton($url, $winName, $winSize, $buttonValue, $condition=1, $options='') {
-  $string = '<input type="button" class="popup-link" value="' . htmlspecialchars($buttonValue) . '"';
-  $string .= ' data-url="' . htmlspecialchars($url, ENT_COMPAT | ENT_HTML401, ini_get("default_charset"), false) . '"';
-  $string .= ' data-window-name="' . htmlspecialchars($winName) . '"';
-  if ( is_array($winSize) ) {
-    $string .= ' data-window-tag="' . htmlspecialchars($winSize[0]) . '"';
-    $string .= ' data-window-width="' . htmlspecialchars($winSize[1]) . '"';
-    $string .= ' data-window-height="' . htmlspecialchars($winSize[2]) . '"';
-  } else {
-    $string .= ' data-window-tag="' . htmlspecialchars($winSize) . '"';
-  }
+function makeButton($url, $buttonValue, $condition=1, $options='') {
+  $string = '<button type="button" data-on-click-this="'.$buttonValue.'"';
+  $string .= ' data-url="' .$url. '"';
   if (!$condition) {
     $string .= ' disabled="disabled"';
   }
-  $string .= ($options ? (' ' . $options) : '') . '/>';
+  $string .= ($options ? (' ' . $options) : '') . '/>'.translate($buttonValue).'</button>'.PHP_EOL;
   return $string;
 }
 
@@ -496,13 +468,13 @@ function htmlSelect($name, $contents, $values, $behaviours=false) {
     }
   }
 
-  return "<select name=\"$name\" id=\"$name\"$behaviourText>".htmlOptions($contents, $values).'</select>';
+  return '<select name="'.$name.'" '.$behaviourText.'>'.PHP_EOL.htmlOptions($contents, $values).'</select>';
 }
 
-function htmlOptions($contents, $values) {
+function htmlOptions($options, $values) {
   $options_html = '';
-
-  foreach ( $contents as $value=>$option ) {
+  $has_selected = false;
+  foreach ( $options as $value=>$option ) {
     $disabled = 0;
     $text = '';
     if ( is_array($option) ) {
@@ -520,15 +492,20 @@ function htmlOptions($contents, $values) {
     } else {
       $text = $option;
     }
-    $selected = is_array($values) ? in_array($value, $values) : !strcmp($value, $values);
+    $selected = is_array($values) ? in_array($value, $values) : (!strcmp($value, $values));
+    if ( !$has_selected ) 
+      $has_selected = $selected;
+
     $options_html .= '<option value="'.htmlspecialchars($value, ENT_COMPAT | ENT_HTML401, ini_get('default_charset'), false).'"'.
       ($selected?' selected="selected"':'').
       ($disabled?' disabled="disabled"':'').
-      '>'.htmlspecialchars($text, ENT_COMPAT | ENT_HTML401, ini_get('default_charset'), false).'</option>
-';
+      '>'.htmlspecialchars($text, ENT_COMPAT | ENT_HTML401, ini_get('default_charset'), false).'</option>'.PHP_EOL;
+  } # end foreach options
+  if ( $values and ((!is_array($values)) or count($values) ) and ! $has_selected ) {
+    ZM\Warning('Specified value '.print_r($values, true).' not in contents: '.print_r($options, true));
   }
   return $options_html;
-}
+} # end function htmlOptions
 
 function truncText($text, $length, $deslash=1) {
   return preg_replace('/^(.{'.$length.',}?)\b.*$/', '\\1&hellip;', ($deslash?stripslashes($text):$text));
@@ -563,7 +540,7 @@ function buildSelect($name, $contents, $behaviours=false) {
         $behaviourText .= ' '.$event.'="'.$action.'"';
       }
     } else {
-      $behaviourText = ' onchange="'.$behaviours.'"';
+      $behaviourText = ' data-on-change-this="'.$behaviours.'"';
     }
   }
   ?>
@@ -610,7 +587,7 @@ function getFormChanges($values, $newValues, $types=false, $columns=false) {
             $imageData = getimagesize( $newValues[$key]['tmp_name'] );
             $changes[$key.'Width'] = $key.'Width = '.$imageData[0];
             $changes[$key.'Height'] = $key.'Height = '.$imageData[1];
-            $changes[$key.'Type'] = $key."Type = '".$newValues[$key]['type']."'";
+            $changes[$key.'Type'] = $key.'Type = \''.$newValues[$key]['type'].'\'';
             $changes[$key.'Size'] = $key.'Size = '.$newValues[$key]['size'];
             ob_start();
             readfile( $newValues[$key]['tmp_name'] );
@@ -623,7 +600,7 @@ function getFormChanges($values, $newValues, $types=false, $columns=false) {
       case 'document' :
           if ( is_array( $newValues[$key] ) ) {
             $imageData = getimagesize( $newValues[$key]['tmp_name'] );
-            $changes[$key.'Type'] = $key."Type = '".$newValues[$key]['type']."'";
+            $changes[$key.'Type'] = $key.'Type = \''.$newValues[$key]['type'].'\'';
             $changes[$key.'Size'] = $key.'Size = '.$newValues[$key]['size'];
             ob_start();
             readfile( $newValues[$key]['tmp_name'] );
@@ -638,7 +615,7 @@ function getFormChanges($values, $newValues, $types=false, $columns=false) {
           $changes[$key.'Size'] = $key.'Size = '.dbEscape($newValues[$key]['size']);
           ob_start();
           readfile( $newValues[$key]['tmp_name'] );
-          $changes[$key] = $key." = '".dbEscape( ob_get_contents() )."'";
+          $changes[$key] = $key.' = \''.dbEscape( ob_get_contents() ).'\'';
           ob_end_clean();
           break;
       case 'raw' :
@@ -649,9 +626,9 @@ function getFormChanges($values, $newValues, $types=false, $columns=false) {
       case 'toggle' :
         if ( (!isset($values[$key])) or $values[$key] != $value ) {
           if ( empty($value) ) {
-            $changes[$key] = "$key = 0";
+            $changes[$key] = $key.' = 0';
           } else {
-            $changes[$key] = "$key = 1";
+            $changes[$key] = $key.' = 1';
             //$changes[$key] = $key . ' = '.dbEscape(trim($value));
           }
         }
@@ -678,10 +655,10 @@ function getFormChanges($values, $newValues, $types=false, $columns=false) {
       if ( !empty($types[$key]) ) {
         if ( $types[$key] == 'toggle' ) {
           if ( !isset($newValues[$key]) && !empty($value) ) {
-            $changes[$key] = "$key = 0";
+            $changes[$key] = "`$key` = 0";
           }
         } else if ( $types[$key] == 'set' ) {
-          $changes[$key] = "$key = ''";
+          $changes[$key] = "`$key` = ''";
         }
       }
     }
@@ -813,7 +790,7 @@ function daemonControl($command, $daemon=false, $args=false) {
   }
   $string = escapeshellcmd($string);
   #$string .= ' 2>/dev/null >&- <&- >/dev/null';
-  ZM\Logger::Debug("daemonControl $string");
+  ZM\Debug('daemonControl '.$string);
   exec($string);
 }
 
@@ -869,7 +846,7 @@ function zmaStatus($monitor) {
   if ( is_array($monitor) ) {
     $monitor = $monitor['Id'];
   }
-  return daemonStatus('zma', "-m $monitor");
+  return daemonStatus('zma', '-m '.$monitor);
 }
 
 function daemonCheck($daemon=false, $args=false) {
@@ -897,7 +874,7 @@ function zmaCheck($monitor) {
   if ( is_array($monitor) ) {
     $monitor = $monitor['Id'];
   }
-  return daemonCheck('zma', "-m $monitor");
+  return daemonCheck('zma', '-m '.$monitor);
 }
 
 function getImageSrc($event, $frame, $scale=SCALE_BASE, $captureOnly=false, $overwrite=false) {
@@ -954,7 +931,7 @@ function createVideo($event, $format, $rate, $scale, $overwrite=false) {
     $command .= ' -o';
   $command = escapeshellcmd($command);
   $result = exec($command, $output, $status);
-  ZM\Logger::Debug("generating Video $command: result($result outptu:(".implode("\n", $output )." status($status");
+  ZM\Debug("generating Video $command: result($result outptu:(".implode("\n", $output )." status($status");
   return $status ? '' : rtrim($result);
 }
 
@@ -1029,12 +1006,15 @@ function parseSort($saveToSession=false, $querySep='&amp;') {
       $sortColumn = 'E.StartTime';
       break;
     case 'StartDateTime' :
+      // Fix for systems with EVENT_SORT_ORDER set to erroneous StartDateTime.
+      $_REQUEST['sort_field'] = 'StartTime';
       $sortColumn = 'E.StartTime';
       break;
     case 'EndTime' :
       $sortColumn = 'E.EndTime';
       break;
     case 'EndDateTime' :
+      $_REQUEST['sort_field'] = 'EndTime';
       $sortColumn = 'E.EndTime';
       break;
     case 'Length' :
@@ -1100,7 +1080,7 @@ function parseFilter(&$filter, $saveToSession=false, $querySep='&amp;') {
   $Filter = ZM\Filter::parse($filter, $querySep);
 
   $filter['sql'] = $Filter->sql();
-  $filter['querystring'] = $Filter->querystring();
+  $filter['querystring'] = $Filter->querystring('filter', $querySep);
   $filter['hidden_fields'] = $Filter->hidden_fields();
   $filter['pre_sql_conditions'] = $Filter->pre_sql_conditions();
   $filter['post_sql_conditions'] = $Filter->post_sql_conditions();
@@ -1279,20 +1259,20 @@ function systemStats() {
   if ( $normalized_load <= 0.75 ) {
     $htmlLoad = $load;
   } else if ( $normalized_load <= 0.9 ) {
-    $htmlLoad = "<span class=\"warning\">$load</span>";
+    $htmlLoad = '<span class="warning">'.$load.'</span>';
   } else if ( $normalized_load <= 1.1 ) {
-    $htmlLoad = "<span class=\"error\">$load</span>";
+    $htmlLoad = '<span class="error">'.$load.'</span>';
   } else {
-    $htmlLoad = "<span class=\"critical\">$load</span>";
+    $htmlLoad = '<span class="critical">'.$load.'</span>';
   }
 
   # Colorize the disk space stat
   if ( $diskPercent < 98 ) {
     $htmlDiskPercent = $diskPercent.'%';
   } else if ( $diskPercent <= 99 ) {
-    $htmlDiskPercent = "<span class=\"warning\">$diskPercent%</span>";
+    $htmlDiskPercent = '<span class="warning">'.$diskPercent.'%</span>';
   } else {
-    $htmlDiskPercent = "<span class=\"error\">$diskPercent%</span>";
+    $htmlDiskPercent = '<span class="error">'.$diskPercent.'%</span>';
   }
 
   # Colorize the PATH_MAP (usually /dev/shm) stat
@@ -1300,15 +1280,15 @@ function systemStats() {
     if ( disk_free_space(ZM_PATH_MAP) > 209715200 ) { # have to always have at least 200MiB free
       $htmlPathMapPercent = $pathMapPercent.'%';
     } else {
-      $htmlPathMapPercent = "<span class=\"warning\">$pathMapPercent%</span>";
+      $htmlPathMapPercent = '<span class="warning">'.$pathMapPercent.'%</span>';
     }
   } else if ( $pathMapPercent < 100 ) {
-    $htmlPathMapPercent = "<span class=\"warning\">$pathMapPercent%</span>";
+    $htmlPathMapPercent = '<span class="warning">'.$pathMapPercent.'%</span>';
   } else {
-    $htmlPathMapPercent = "<span class=\"critical\">$pathMapPercent%</span>";
+    $htmlPathMapPercent = '<span class="critical">'.$pathMapPercent.'%</span>';
   }
 
-  $htmlString = translate('Load').": $htmlLoad - ".translate('Disk').": $htmlDiskPercent - ".ZM_PATH_MAP.": $htmlPathMapPercent";
+  $htmlString = translate('Load').': '.$htmlLoad.' - '.translate('Disk').': '.$htmlDiskPercent.' - '.ZM_PATH_MAP.': '.$htmlPathMapPercent;
 
   return $htmlString;
 }
@@ -1491,12 +1471,11 @@ function getPolyCentre($points, $area=0) {
     $area = getPolyArea($points);
   for ( $i = 0, $j = count($points)-1; $i < count($points); $j = $i++ ) {
     $ct = ($points[$i]['x'] * $points[$j]['y']) - ($points[$j]['x'] * $points[$i]['y']);
-    $cx += ($points[$i]['x'] + $points[$j]['x']) * ct;
-    $cy += ($points[$i]['y'] + $points[$j]['y']) * ct;
+    $cx += ($points[$i]['x'] + $points[$j]['x']) * $ct;
+    $cy += ($points[$i]['y'] + $points[$j]['y']) * $ct;
   }
   $cx = intval(round(abs($cx/(6.0*$area))));
   $cy = intval(round(abs($cy/(6.0*$area))));
-  printf( "X:%cx, Y:$cy<br>" );
   return array('x'=>$cx, 'y'=>$cy);
 }
 
@@ -1644,12 +1623,12 @@ function coordsToPoints($coords) {
       if ( preg_match('/(\d+),(\d+)/', $matches[1][$i], $cmatches) ) {
         $points[] = array('x'=>$cmatches[1], 'y'=>$cmatches[2]);
       } else {
-        echo("Bogus coordinates '".$matches[$i]."'");
+        echo('Bogus coordinates ('.$matches[$i].')');
         return false;
       }
     }
   } else {
-    echo("Bogus coordinate string '$coords'");
+    echo('Bogus coordinate string '.$coords);
     return false;
   }
   return $points;
@@ -1658,17 +1637,17 @@ function coordsToPoints($coords) {
 function limitPoints(&$points, $min_x, $min_y, $max_x, $max_y) {
   foreach ( $points as &$point ) {
     if ( $point['x'] < $min_x ) {
-      ZM\Logger::Debug('Limiting point x'.$point['x'].' to min_x '.$min_x);
+      ZM\Debug('Limiting point x'.$point['x'].' to min_x '.$min_x);
       $point['x'] = $min_x;
     } else if ( $point['x'] > $max_x ) {
-      ZM\Logger::Debug('Limiting point x'.$point['x'].' to max_x '.$max_x);
+      ZM\Debug('Limiting point x'.$point['x'].' to max_x '.$max_x);
       $point['x'] = $max_x;
     }
     if ( $point['y'] < $min_y ) {
-      ZM\Logger::Debug('Limiting point y'.$point['y'].' to min_y '.$min_y);
+      ZM\Debug('Limiting point y'.$point['y'].' to min_y '.$min_y);
       $point['y'] = $min_y;
     } else if ( $point['y'] > $max_y ) {
-      ZM\Logger::Debug('Limiting point y'.$point['y'].' to max_y '.$max_y);
+      ZM\Debug('Limiting point y'.$point['y'].' to max_y '.$max_y);
       $point['y'] = $max_y;
     }
   } // end foreach point
@@ -1729,7 +1708,7 @@ function initX10Status() {
     if ( @socket_connect($socket, $sock_file) ) {
       $command = 'status';
       if ( !socket_write($socket, $command) ) {
-        ZM\Fatal("Can't write to control socket: ".socket_strerror(socket_last_error($socket)));
+        ZM\Fatal('Can\'t write to control socket: '.socket_strerror(socket_last_error($socket)));
       }
       socket_shutdown($socket, 1);
       $x10Output = '';
@@ -1765,7 +1744,7 @@ function getDeviceStatusX10($key) {
 function setDeviceStatusX10($key, $status) {
   $socket = socket_create(AF_UNIX, SOCK_STREAM, 0);
   if ( $socket < 0 ) {
-    ZM\Fatal( 'socket_create() failed: '.socket_strerror($socket) );
+    ZM\Fatal('socket_create() failed: '.socket_strerror($socket));
   }
   $sock_file = ZM_PATH_SOCKS.'/zmx10.sock';
   if ( @socket_connect($socket, $sock_file) ) {
@@ -1984,7 +1963,7 @@ function cache_bust($file) {
   if ( file_exists(ZM_DIR_CACHE.'/'.$cacheFile) or symlink(ZM_PATH_WEB.'/'.$file, ZM_DIR_CACHE.'/'.$cacheFile) ) {
     return 'cache/'.$cacheFile;
   } else {
-    ZM\Warning("Failed linking $file to $cacheFile");
+    ZM\Warning('Failed linking '.$file.' to '.$cacheFile);
   }
   return $file;
 }
@@ -2060,7 +2039,7 @@ function getStreamHTML($monitor, $options = array()) {
 
   if ( isset($options['scale']) and $options['scale'] != '' ) {
     if ( $options['scale'] != 'auto' && $options['scale'] != '0' ) {
-      ZM\Warning("Setting dimensions from scale:".$options['scale']);
+      #ZM\Warning('Setting dimensions from scale:'.$options['scale']);
       $options['width'] = reScale($monitor->ViewWidth(), $options['scale']).'px';
       $options['height'] = reScale($monitor->ViewHeight(), $options['scale']).'px';
     } else if ( ! ( isset($options['width']) or isset($options['height']) ) ) {
@@ -2077,14 +2056,15 @@ function getStreamHTML($monitor, $options = array()) {
       # no dimensions, so assume the dimensions of the Monitor
 
       if ( ! (isset($options['height']) and $options['height']) ) {
-        $options['width'] = $monitor->ViewWidth().'px';
-        $options['height'] = $monitor->ViewHeight().'px';
+        # If we havn't specified any scale or dimensions, then we must be using CSS to scale it in a dynamic way. Can't make any assumptions.
+        #$options['width'] = $monitor->ViewWidth().'px';
+        #$options['height'] = $monitor->ViewHeight().'px';
       }
     } else {
-      ZM\Warning("Have width ".$options['width']);
+      #ZM\Warning("Have width ".$options['width']);
       if ( preg_match('/^(\d+)px$/', $options['width'], $matches) ) {
         $scale = intval(100*$matches[1]/$monitor->ViewWidth());
-        ZM\Warning("Scale is $scale");
+        #ZM\Warning("Scale is $scale");
         if ( $scale < $options['scale'] )
           $options['scale'] = $scale;
       } else if ( preg_match('/^(\d+)%$/', $options['width'], $matches) ) {
@@ -2092,9 +2072,9 @@ function getStreamHTML($monitor, $options = array()) {
         if ( $scale < $options['scale'] )
           $options['scale'] = $scale;
       } else {
-        Warning("Invalid value for width: ".$options['width']);
+        ZM\Warning('Invalid value for width: '.$options['width']);
       }
-    } 
+    }
   }
   if ( ! isset($options['mode'] ) ) {
     $options['mode'] = 'stream';
@@ -2139,7 +2119,10 @@ function getStreamHTML($monitor, $options = array()) {
     }
     $options['mode'] = 'single';
     $streamSrc = $monitor->getStreamSrc($options);
-    return getImageStill('liveStream'.$monitor->Id(), $streamSrc, $options['width'], $options['height'], $monitor->Name());
+    return getImageStill('liveStream'.$monitor->Id(), $streamSrc,
+      (isset($options['width']) ? $options['width'] : null),
+      (isset($options['height']) ? $options['height'] : null),
+      $monitor->Name());
   }
 } // end function getStreamHTML
 
@@ -2189,7 +2172,7 @@ function check_timezone() {
     'TIME_FORMAT(TIMEDIFF(NOW(), UTC_TIMESTAMP),\'%H%i\')'
   ));
 
-  #Logger::Debug("System timezone offset determine to be: $sys_tzoffset,\x20
+  #Debug("System timezone offset determine to be: $sys_tzoffset,\x20
                  #PHP timezone offset determine to be: $php_tzoffset,\x20
                  #Mysql timezone offset determine to be: $mysql_tzoffset
                #");
@@ -2198,10 +2181,10 @@ function check_timezone() {
     ZM\Error("ZoneMinder is not configured properly: php's date.timezone $php_tzoffset does not match the system timezone $sys_tzoffset! Please check Options->System->Timezone.");
 
   if ( $sys_tzoffset != $mysql_tzoffset )
-    ZM\Error("ZoneMinder is not configured properly: mysql's timezone does not match the system timezone! Event lists will display incorrect times.");
+    ZM\Error('ZoneMinder is not configured properly: mysql\'s timezone does not match the system timezone! Event lists will display incorrect times.');
 
   if (!ini_get('date.timezone') || !date_default_timezone_set(ini_get('date.timezone')))
-    ZM\Error("ZoneMinder is not configured properly: php's date.timezone is not set to a valid timezone. Please check Options->System->Timezone");
+    ZM\Error('ZoneMinder is not configured properly: php\'s date.timezone is not set to a valid timezone. Please check Options->System->Timezone');
 
 }
 
@@ -2261,12 +2244,12 @@ function do_post_request($url, $data, $optional_headers = null) {
   $ctx = stream_context_create($params);
   $fp = @fopen($url, 'rb', false, $ctx);
   if ( !$fp ) {
-    throw new Exception("Problem with $url, "
+    throw new Exception('Problem with '.$url.', '
       .print_r(error_get_last(),true));
   }
   $response = @stream_get_contents($fp);
   if ( $response === false ) {
-    throw new Exception("Problem reading data from $url, data: ".print_r($params,true)
+    throw new Exception('Problem reading data from '.$url.', data: '.print_r($params,true)
       .print_r(error_get_last(),true));
   }
   return $response;
@@ -2286,7 +2269,7 @@ if ( !function_exists('sem_get') ) {
 }
 
 if ( !function_exists('ftok') ) {
-  function ftok($filename = "", $proj = "") {
+  function ftok($filename = '', $proj = '') {
     if ( empty($filename) || !file_exists($filename) ) {
       return -1;
     } else {
@@ -2323,10 +2306,9 @@ function format_duration($time, $separator=':') {
 function array_recursive_diff($aArray1, $aArray2) {
   $aReturn = array();
   if ( ! (is_array($aArray1) and is_array($aArray2) ) ) {
-        $backTrace = debug_backtrace();
-        ZM\Warning("Bad arrays passed 1:" . print_r($aArray1,true) . "\n2: " . print_r($aArray2,true)."\n from: ".print_r($backTrace,true));
-        return;
-
+    $backTrace = debug_backtrace();
+    ZM\Warning('Bad arrays passed 1:' . print_r($aArray1,true) . PHP_EOL.'2: '.print_r($aArray2,true).PHP_EOL.' from: '.print_r($backTrace,true));
+    return;
   }
 
   foreach ( $aArray1 as $mKey => $mValue ) {
@@ -2409,12 +2391,12 @@ function html_radio($name, $values, $selected=null, $options=array(), $attrs=arr
 
 function random_colour() {
   return '#'.
-    str_pad( dechex( mt_rand( 0, 255 ) ), 2, '0', STR_PAD_LEFT).
-    str_pad( dechex( mt_rand( 0, 255 ) ), 2, '0', STR_PAD_LEFT).
-    str_pad( dechex( mt_rand( 0, 255 ) ), 2, '0', STR_PAD_LEFT);
+    str_pad( dechex( mt_rand(0, 255) ), 2, '0', STR_PAD_LEFT).
+    str_pad( dechex( mt_rand(0, 255) ), 2, '0', STR_PAD_LEFT).
+    str_pad( dechex( mt_rand(0, 255) ), 2, '0', STR_PAD_LEFT);
 }
 
-function zm_random_bytes($length = 32){
+function zm_random_bytes($length = 32) {
   if ( !isset($length) || intval($length) <= 8 ) {
     $length = 32;
   }
@@ -2428,5 +2410,12 @@ function zm_random_bytes($length = 32){
     return openssl_random_pseudo_bytes($length);
   }
   ZM\Error('No random_bytes function found.');
+}
+
+function i18n() {
+  $string = explode('_', ZM_LANG_DEFAULT, 2);
+  $string[1] = strtoupper($string[1]);
+
+  return implode('-', $string);
 }
 ?>

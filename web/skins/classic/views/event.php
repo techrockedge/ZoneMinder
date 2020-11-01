@@ -55,7 +55,7 @@ if ( isset($_REQUEST['scale']) ) {
 } else if ( isset($_COOKIE['zmEventScale'.$Event->MonitorId()]) ) {
   $scale = $_COOKIE['zmEventScale'.$Event->MonitorId()];
 } else {
-  $scale = reScale(SCALE_BASE, $Monitor->DefaultScale(), ZM_WEB_DEFAULT_SCALE);
+  $scale = $Monitor->DefaultScale();
 }
 
 $codec = 'auto';
@@ -154,7 +154,7 @@ if ( !$Event->Id() ) {
   human_filesize($Event->DiskSpace(null)) . ' on ' . validHtmlStr($Event->Storage()->Name()).
   ( $Event->SecondaryStorageId() ? ', '.validHtmlStr($Event->SecondaryStorage()->Name()) : '' )
 ?></span>
-        <div id="closeWindow"><a href="#" data-on-click="<?php echo $popup ? 'window.close()' : 'window.history.back();return false;' ?>"><?php echo $popup ? translate('Close') : translate('Back') ?></a></div>
+        <div id="closeWindow"><a href="#" data-on-click="<?php echo $popup ? 'closeWindow' : 'backWindow' ?>"><?php echo $popup ? translate('Close') : translate('Back') ?></a></div>
       </div>
       <div id="menuBar1">
         <div id="nameControl">
@@ -189,15 +189,15 @@ if ( canEdit('Events') ) {
         <div id="exportEvent"><button type="button" data-on-click="exportEvent"><?php echo translate('Export') ?></button></div>
         <div id="replayControl">
           <label for="replayMode"><?php echo translate('Replay') ?></label>
-          <?php echo htmlSelect('replayMode', $replayModes, $replayMode, array('data-on-change'=>'changeReplayMode')); ?>
+          <?php echo htmlSelect('replayMode', $replayModes, $replayMode, array('data-on-change'=>'changeReplayMode','id'=>'replayMode')); ?>
         </div>
         <div id="scaleControl">
           <label for="scale"><?php echo translate('Scale') ?></label>
-          <?php echo htmlSelect('scale', $scales, $scale, array('data-on-change'=>'changeScale')); ?>
+          <?php echo htmlSelect('scale', $scales, $scale, array('data-on-change'=>'changeScale','id'=>'scale')); ?>
         </div>
         <div id="codecControl">
           <label for="codec"><?php echo translate('Codec') ?></label>
-          <?php echo htmlSelect('codec', $codecs, $codec, array('data-on-change'=>'changeCodec')); ?>
+          <?php echo htmlSelect('codec', $codecs, $codec, array('data-on-change'=>'changeCodec','id'=>'codec')); ?>
         </div>
       </div>
     </div>
@@ -211,7 +211,12 @@ if ( ($codec == 'MP4' || $codec == 'auto' ) && $Event->DefaultVideo() ) {
             style="transform: matrix(1, 0, 0, 1, 0, 0);"
            <?php echo $scale ? 'width="'.reScale($Event->Width(), $scale).'"' : '' ?>
            <?php echo $scale ? 'height="'.reScale($Event->Height(), $scale).'"' : '' ?>
-            data-setup='{ "controls": true, "autoplay": true, "preload": "auto", "plugins": { "zoomrotate": { "zoom": "<?php echo $Zoom ?>"}}}'
+            data-setup='{ "controls": true, "autoplay": true, "preload": "auto", "playbackRates": [ <?php echo implode(',',
+              array_map(function($r){return $r/100;},
+                array_filter(
+                  array_keys($rates),
+                  function($r){return $r >= 0 ? true : false;}
+                ))) ?>], "plugins": { "zoomrotate": { "zoom": "<?php echo $Zoom ?>"}}}'
           >
           <source src="<?php echo $Event->getStreamSrc(array('mode'=>'mpeg','format'=>'h264'),'&amp;'); ?>" type="video/mp4">
           <track id="monitorCaption" kind="captions" label="English" srclang="en" src='data:plain/text;charset=utf-8,"WEBVTT\n\n 00:00:00.000 --> 00:00:01.000 ZoneMinder"' default/>
@@ -274,7 +279,7 @@ if ( (ZM_WEB_STREAM_METHOD == 'mpeg') && ZM_MPEG_LIVE_FORMAT ) {
           <span id="mode"><?php echo translate('Mode') ?>: <span id="modeValue">Replay</span></span>
           <span id="rate"><?php echo translate('Rate') ?>: 
 <?php 
-$rates = array( -800=>'-8x', -400=>'-4x', -200=>'-2x', -100=>'-1x', 0=>translate('Stop'), 100 => '1x', 200=>'2x', 400=>'4x', 800=>'8x' );
+#rates are defined in skins/classic/includes/config.php
 echo htmlSelect('rate', $rates, intval($rate), array('id'=>'rateValue'));
 ?>
 <!--<span id="rateValue"><?php echo $rate/100 ?></span>x</span>-->
@@ -322,5 +327,4 @@ echo htmlSelect('rate', $rates, intval($rate), array('id'=>'rateValue'));
 ?>
     </div><!--content-->
   </div><!--page-->
-</body>
-</html>
+<?php xhtmlFooter() ?>

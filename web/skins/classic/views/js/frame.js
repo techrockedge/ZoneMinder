@@ -24,7 +24,7 @@ function changeScale() {
     img.css('width', newWidth + 'px');
     img.css('height', newHeight + 'px');
   }
-  Cookie.write('zmWatchScale', scale, {duration: 10*365});
+  Cookie.write('zmWatchScale', scale, {duration: 10*365, samesite: 'strict'});
   $j.each(controlsLinks, function(k, anchor) { //Make frames respect scale choices
     if ( anchor ) {
       anchor.prop('href', anchor.prop('href').replace(/scale=.*&/, 'scale=' + scale + '&'));
@@ -37,7 +37,7 @@ if ( !scale ) {
 }
 
 document.addEventListener('DOMContentLoaded', function onDCL() {
-  document.getElementById('scale').addEventListener('change', changeScale);
+  document.getElementById('scaleControl').addEventListener('change', changeScale);
 });
 
 function initPage() {

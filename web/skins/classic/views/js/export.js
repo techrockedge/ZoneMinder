@@ -18,10 +18,8 @@ function configureExportButton(element) {
       form.elements['exportImages'].checked ||
       form.elements['exportVideo'].checked ||
       form.elements['exportMisc'].checked
-    )
-    &&
-    ( form.elements['exportFormat'][0].checked || form.elements['exportFormat'][1].checked )
-    &&
+    ) &&
+    ( form.elements['exportFormat'][0].checked || form.elements['exportFormat'][1].checked ) &&
     ( form.elements['exportCompress'][0].checked || form.elements['exportCompress'][1].checked )
   );
 }
@@ -82,12 +80,48 @@ function exportEvents( ) {
   exportTimer = exportProgress.periodical( 500 );
 }
 
+function getEventDetailModal(eid) {
+  $j.getJSON(thisUrl + '?request=modal&modal=eventdetail&eids[]=' + eid)
+      .done(function(data) {
+        insertModalHtml('eventDetailModal', data.html);
+        $j('#eventDetailModal').modal('show');
+        // Manage the Save button
+        $j('#eventDetailSaveBtn').click(function(evt) {
+          evt.preventDefault();
+          $j('#eventDetailForm').submit();
+        });
+      })
+      .fail(logAjaxFail);
+}
+
 function initPage() {
   configureExportButton( $('exportButton') );
   if ( exportReady ) {
     startDownload.pass(exportFile).delay(1500);
   }
   document.getElementById('exportButton').addEventListener('click', exportEvents);
+
+  // Manage the eventdetail link in the export list
+  $j(".eDetailLink").click(function(evt) {
+    evt.preventDefault();
+    var eid = $j(this).data('eid');
+    getEventDetailModal(eid);
+  });
+
+  // Manage the BACK button
+  document.getElementById("backBtn").addEventListener("click", function onBackClick(evt) {
+    evt.preventDefault();
+    window.history.back();
+  });
+
+  // Don't enable the back button if there is no previous zm page to go back to
+  $j('#backBtn').prop('disabled', !document.referrer.length);
+
+  // Manage the REFRESH Button
+  document.getElementById("refreshBtn").addEventListener("click", function onRefreshClick(evt) {
+    evt.preventDefault();
+    window.location.reload(true);
+  });
 }
 
 window.addEventListener('DOMContentLoaded', initPage);

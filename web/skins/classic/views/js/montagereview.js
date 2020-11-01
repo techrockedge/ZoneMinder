@@ -48,8 +48,7 @@ function evaluateLoadTimes() {
 function getFrame(monId, time, last_Frame) {
   if ( last_Frame ) {
     if (
-      (last_Frame.TimeStampSecs <= time)
-      &&
+      (last_Frame.TimeStampSecs <= time) &&
       (last_Frame.EndTimeStampSecs >= time)
     ) {
       return last_Frame;
@@ -104,12 +103,11 @@ function getFrame(monId, time, last_Frame) {
         continue;
       }
       if (
-        e.FramesById[frame_id].TimeStampSecs == time
-          || (
-            e.FramesById[frame_id].TimeStampSecs < time
-            && (
-              (!e.FramesById[frame_id].NextTimeStampSecs) // only if event.EndTime is null
-             ||
+        e.FramesById[frame_id].TimeStampSecs == time ||
+          (
+            e.FramesById[frame_id].TimeStampSecs < time &&
+            (
+              (!e.FramesById[frame_id].NextTimeStampSecs) || // only if event.EndTime is null
              (e.FramesById[frame_id].NextTimeStampSecs > time)
             )
           )
@@ -737,8 +735,16 @@ function click_panright() {
   maxTimeSecs = minTimeSecs + rangeTimeSecs - 1;
   clicknav(minTimeSecs, maxTimeSecs, 0);
 }
+// Manage the DOWNLOAD VIDEO button
 function click_download() {
-  createPopup('?view=download', 'zmDownload', 'download');
+  $j.getJSON(thisUrl + '?request=modal&modal=download')
+      .done(function(data) {
+        insertModalHtml('downloadModal', data.html);
+        $j('#downloadModal').modal('show');
+        // Manage the GENERATE DOWNLOAD button
+        $j('#exportButton').click(exportEvent);
+      })
+      .fail(logAjaxFail);
 }
 function click_all_events() {
   clicknav(0, 0, 0);
@@ -871,15 +877,15 @@ function showOneMonitor(monId) {
   var url;
   if ( liveMode != 0 ) {
     url = '?view=watch&mid=' + monId.toString();
-    createPopup(url, 'zmWatch', 'watch', monitorWidth[monId], monitorHeight[monId]);
+    window.location.assign(url);
   } else {
     var Frame = getFrame(monId, currentTimeSecs);
     if ( Frame ) {
       url = '?view=event&eid=' + Frame.EventId + '&fid=' + Frame.FrameId;
-      createPopup(url, 'zmEvent', 'event', monitorWidth[monId], monitorHeight[monId]);
+      window.location.assign(url);
     } else {
       url = '?view=watch&mid=' + monId.toString();
-      createPopup(url, 'zmWatch', 'watch', monitorWidth[monId], monitorHeight[monId]);
+      window.location.assign(url);
     }
   } // end if live/events
 }

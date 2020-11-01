@@ -105,7 +105,6 @@ function initPage() {
   document.querySelectorAll('input[name="newMonitor[MaxFPS]"]').forEach(function(el) {
     el.oninput = el.onclick = function(e) {
       if ( e.target.value ) {
-        console.log('showing');
         $j('#newMonitor\\[MaxFPS\\]').show();
       } else {
         $j('#newMonitor\\[MaxFPS\\]').hide();
@@ -115,7 +114,6 @@ function initPage() {
   document.querySelectorAll('input[name="newMonitor[AlarmMaxFPS]"]').forEach(function(el) {
     el.oninput = el.onclick = function(e) {
       if ( e.target.value ) {
-        console.log('showing');
         $j('#newMonitor\\[AlarmMaxFPS\\]').show();
       } else {
         $j('#newMonitor\\[AlarmMaxFPS\\]').hide();
@@ -136,6 +134,16 @@ function initPage() {
   });
   document.querySelectorAll('input[name="newMonitor[WebColour]"]').forEach(function(el) {
     el.onchange = window['change_WebColour'].bind(el);
+  });
+  document.querySelectorAll('select[name="newMonitor[Type]"]').forEach(function(el) {
+    el.onchange = function() {
+      var form = document.getElementById('contentForm');
+      form.tab.value = 'general';
+      form.submit();
+    };
+  });
+  document.querySelectorAll('input[name="newMonitor[ImageBufferCount]"],input[name="newMonitor[Width]"],input[name="newMonitor[Height]"]').forEach(function(el) {
+    el.oninput = window['update_estimated_ram_use'].bind(el);
   });
 
   $j('.chosen').chosen();
@@ -193,6 +201,32 @@ function initPage() {
     evt.preventDefault();
     window.location.assign('?view=console');
   });
+
+  if ( ZM_OPT_USE_GEOLOCATION ) {
+    if ( window.L ) {
+      var form = document.getElementById('contentForm');
+      var latitude = form.elements['newMonitor[Latitude]'].value;
+      var longitude = form.elements['newMonitor[Longitude]'].value;
+      map = L.map('LocationMap', {
+        center: L.latLng(latitude, longitude),
+        zoom: 13,
+        onclick: function() {
+          alert('click');
+        }
+      });
+      L.tileLayer(ZM_OPT_GEOLOCATION_TILE_PROVIDER, {
+        attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+        maxZoom: 18,
+        id: 'mapbox/streets-v11',
+        tileSize: 512,
+        zoomOffset: -1,
+        accessToken: ZM_OPT_GEOLOCATION_ACCESS_TOKEN,
+      }).addTo(map);
+      L.marker([latitude, longitude]).addTo(map);
+    } else {
+      console.log('Location turned on but leaflet not installed.');
+    }
+  } // end if ZM_OPT_USE_GEOLOCATION
 } // end function initPage()
 
 function change_WebColour() {
@@ -217,6 +251,30 @@ function random_WebColour() {
   $j('#WebSwatch').css(
       'backgroundColor', new_colour
   );
+}
+
+function update_estimated_ram_use() {
+  var buffer_count = document.querySelectorAll('input[name="newMonitor[ImageBufferCount]"]')[0].value;
+  var width = document.querySelectorAll('input[name="newMonitor[Width]"]')[0].value;
+  var height = document.querySelectorAll('input[name="newMonitor[Height]"]')[0].value;
+  var colours = document.querySelectorAll('select[name="newMonitor[Colours]"]')[0].value;
+
+  document.getElementById('estimated_ram_use').innerHTML = human_filesize(buffer_count * width * height * colours, 0);
+}
+
+function updateLatitudeAndLongitude(latitude, longitude) {
+  var form = document.getElementById('contentForm');
+  form.elements['newMonitor[Latitude]'].value = latitude;
+  form.elements['newMonitor[Longitude]'].value = longitude;
+}
+function getLocation() {
+  if ('geolocation' in navigator) {
+    navigator.geolocation.getCurrentPosition((position) => {
+      updateLatitudeAndLongitude(position.coords.latitude, position.coords.longitude);
+    });
+  } else {
+    console.log("Geolocation not available");
+  }
 }
 
 window.addEventListener('DOMContentLoaded', initPage);

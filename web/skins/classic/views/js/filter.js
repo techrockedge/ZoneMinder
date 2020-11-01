@@ -39,31 +39,31 @@ function validateForm(form) {
   } else if ( form.elements['filter[UpdateDiskSpace]'].checked ) {
     var have_endtime_term = false;
     for ( var i = 0; i < rows.length; i++ ) {
-      if ( form.elements['filter[Query][terms][' + i + '][attr]'].value == 'EndDateTime' ) {
+      if (
+        ( form.elements['filter[Query][terms][' + i + '][attr]'].value == 'EndDateTime' )
+        ||
+        ( form.elements['filter[Query][terms][' + i + '][attr]'].value == 'EndTime' )
+        ||
+        ( form.elements['filter[Query][terms][' + i + '][attr]'].value == 'EndDate' )
+      ) {
         have_endtime_term = true;
+        break;
       }
     }
     if ( ! have_endtime_term ) {
-      return confirm('You don\'t have an EndTime term in your filter.  This will match recordings that are still in progress and so the UpdateDiskSpace action will be a waste of time and resources.  Ideally you should have an EndTime IS NOT NULL term.  Do you want to continue?');
+      return confirm('You don\'t have an End Date/Time term in your filter.  This might match recordings that are still in progress and so the UpdateDiskSpace action will be a waste of time and resources.  Ideally you should have an End Date/Time IS NOT NULL term.  Do you want to continue?');
     }
   } else if ( form.elements['filter[Background]'].checked ) {
     if ( ! (
-      form.elements['filter[AutoArchive]'].checked
-      ||
-      form.elements['filter[UpdateDiskSpace]'].checked
-      ||
-      form.elements['filter[AutoVideo]'].checked
-      ||
-      form.elements['filter[AutoEmail]'].checked
-      ||
-      form.elements['filter[AutoMessage]'].checked
-      ||
-      form.elements['filter[AutoExecute]'].checked
-      ||
-      form.elements['filter[AutoDelete]'].checked
-      ||
-      form.elements['filter[AutoCopy]'].checked
-      ||
+      form.elements['filter[AutoArchive]'].checked ||
+      form.elements['filter[AutoUnarchive]'].checked ||
+      form.elements['filter[UpdateDiskSpace]'].checked ||
+      form.elements['filter[AutoVideo]'].checked ||
+      form.elements['filter[AutoEmail]'].checked ||
+      form.elements['filter[AutoMessage]'].checked ||
+      form.elements['filter[AutoExecute]'].checked ||
+      form.elements['filter[AutoDelete]'].checked ||
+      form.elements['filter[AutoCopy]'].checked ||
       form.elements['filter[AutoMove]'].checked
     ) ) {
       alert('You have chosen to run this filter in the background but not selected any actions.');
@@ -74,33 +74,32 @@ function validateForm(form) {
 
 function updateButtons(element) {
   var form = element.form;
-  if ( element.type == 'checkbox' && element.checked ) {
-    form.elements['executeButton'].disabled = false;
-  } else {
-    var canExecute = false;
-    if ( form.elements['filter[AutoArchive]'] && form.elements['filter[AutoArchive]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoCopy]'] && form.elements['filter[AutoCopy]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoMove]'] && form.elements['filter[AutoMove]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoVideo]'] && form.elements['filter[AutoVideo]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoUpload]'] && form.elements['filter[AutoUpload]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoEmail]'] && form.elements['filter[AutoEmail]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoMessage]'] && form.elements['filter[AutoMessage]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoExecute]'].checked && form.elements['filter[AutoExecuteCmd]'].value != '' ) {
-      canExecute = true;
-    } else if ( form.elements['filter[AutoDelete]'].checked ) {
-      canExecute = true;
-    } else if ( form.elements['filter[UpdateDiskSpace]'].checked ) {
-      canExecute = true;
-    }
-    form.elements['executeButton'].disabled = !canExecute;
+
+  var canExecute = false;
+  if ( form.elements['filter[AutoArchive]'] && form.elements['filter[AutoArchive]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoUnarchive]'] && form.elements['filter[AutoUnarchive]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoCopy]'] && form.elements['filter[AutoCopy]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoMove]'] && form.elements['filter[AutoMove]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoVideo]'] && form.elements['filter[AutoVideo]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoUpload]'] && form.elements['filter[AutoUpload]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoEmail]'] && form.elements['filter[AutoEmail]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoMessage]'] && form.elements['filter[AutoMessage]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoExecute]'].checked && form.elements['filter[AutoExecuteCmd]'].value != '' ) {
+    canExecute = true;
+  } else if ( form.elements['filter[AutoDelete]'].checked ) {
+    canExecute = true;
+  } else if ( form.elements['filter[UpdateDiskSpace]'].checked ) {
+    canExecute = true;
   }
+  form.elements['executeButton'].disabled = !canExecute;
   if ( form.elements['filter[Name]'].value ) {
     form.elements['Save'].disabled = false;
     form.elements['SaveAs'].disabled = false;
@@ -172,7 +171,6 @@ function submitToMontageReview(element) {
 function submitToExport(element) {
   var form = element.form;
   window.location.assign('?view=export&'+$j(form).serialize());
-  //createPopup('?view=export&filter_id='+form.elements['Id'].value, 'zmExport', 'export' );
 }
 
 function executeFilter( element ) {
@@ -396,11 +394,47 @@ function delTerm( element ) {
   parseRows(rows);
 }
 
+function debugFilter() {
+  getModal('filterdebug');
+}
+
+// Load the Delete Confirmation Modal HTML via Ajax call
+function getModal(id) {
+  $j.getJSON(thisUrl + '?request=modal&modal='+id+'&fid='+filterid)
+      .done(function(data) {
+        if ( !data ) {
+          console.error("Get modal returned no data");
+          return;
+        }
+
+        insertModalHtml(id, data.html);
+        manageModalBtns(id);
+        modal = $j('#'+id+'Modal');
+        if ( ! modal.length ) {
+          console.log("No modal found");
+        }
+        $j('#'+id+'Modal').modal('show');
+      })
+      .fail(logAjaxFail);
+}
+
+function manageModalBtns(id) {
+  console.log(id);
+  // Manage the CANCEL modal button
+  var cancelBtn = document.getElementById(id+"CancelBtn");
+  if ( cancelBtn ) {
+    document.getElementById(id+"CancelBtn").addEventListener("click", function onCancelClick(evt) {
+      $j('#'+id).modal('hide');
+    });
+  }
+}
+
 function init() {
   updateButtons( $('executeButton') );
   $j('#Id').chosen();
   $j('#fieldsTable select').not("[name$='br\\]'], [name$='cnj\\]']").chosen({width: '101%'}); //Every select except brackets/and
   $j("#sortTable [name$='sort_field\\]']").chosen();
+  parseRows($j('#fieldsTable tbody').children());
 }
 
 window.addEventListener( 'DOMContentLoaded', init );

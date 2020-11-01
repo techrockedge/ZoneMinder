@@ -22,8 +22,7 @@ function setButtonStates( element ) {
   var checked = 0;
   for ( var i=0; i < form.elements.length; i++ ) {
     if (
-      form.elements[i].type=="checkbox"
-      &&
+      form.elements[i].type=="checkbox" &&
       form.elements[i].name=="markMids[]"
     ) {
       var tr = $j(form.elements[i]).closest("tr");
@@ -62,10 +61,8 @@ function cloneMonitor(element) {
   // get the value of the first checkbox
   for ( var i = 0; i < form.elements.length; i++ ) {
     if (
-      form.elements[i].type == "checkbox"
-      &&
-      form.elements[i].name == "markMids[]"
-      &&
+      form.elements[i].type == "checkbox" &&
+      form.elements[i].name == "markMids[]" &&
       form.elements[i].checked
     ) {
       monitorId = form.elements[i].value;
@@ -83,10 +80,8 @@ function editMonitor( element ) {
 
   for ( var i = 0; i < form.elements.length; i++ ) {
     if (
-      form.elements[i].type == "checkbox"
-      &&
-      form.elements[i].name == "markMids[]"
-      &&
+      form.elements[i].type == "checkbox" &&
+      form.elements[i].name == "markMids[]" &&
       form.elements[i].checked
     ) {
       monitorIds.push( form.elements[i].value );
@@ -118,10 +113,8 @@ function selectMonitor(element) {
   var url = thisUrl+'?view=console';
   for ( var i = 0; i < form.elements.length; i++ ) {
     if (
-      form.elements[i].type == 'checkbox'
-      &&
-      form.elements[i].name == 'markMids[]'
-      &&
+      form.elements[i].type == 'checkbox' &&
+      form.elements[i].name == 'markMids[]' &&
       form.elements[i].checked
     ) {
       url += '&MonitorId[]='+form.elements[i].value;
@@ -134,23 +127,71 @@ function reloadWindow() {
   window.location.replace( thisUrl );
 }
 
-function initPage() {
-  $j('.functionLnk').click(function(evt) {
-    if ( ! canEditEvents ) {
-      alert("You do not have permission to change monitor function.");
-      return;
-    }
-    var mid = evt.currentTarget.getAttribute("data-mid");
-    evt.preventDefault();
-    $j('#modalFunction-'+mid).modal('show');
-  });
+// Manage the the Function modal and its buttons
+function manageFunctionModal(evt) {
+  evt.preventDefault();
 
-  reloadWindow.periodical(consoleRefreshTimeout);
-  if ( showVersionPopup ) {
-    window.location.assign('?view=version');
+  if ( !canEditEvents ) {
+    enoperm();
+    return;
   }
+
+  if ( ! $j('#modalFunction').length ) {
+    // Load the Function modal on page load
+    $j.getJSON(thisUrl + '?request=modal&modal=function')
+        .done(function(data) {
+          insertModalHtml('modalFunction', data.html);
+          // Manage the CANCEL modal buttons
+          $j('.funcCancelBtn').click(function(evt) {
+            evt.preventDefault();
+            $j('#modalFunction').modal('hide');
+          });
+          // Manage the SAVE modal buttons
+          $j('.funcSaveBtn').click(function(evt) {
+            evt.preventDefault();
+            $j('#function_form').submit();
+          });
+
+          manageFunctionModal(evt);
+        })
+        .fail(logAjaxFail);
+    return;
+  }
+
+  var mid = evt.currentTarget.getAttribute('data-mid');
+  monitor = monitors[mid];
+  if ( !monitor ) {
+    console.error("No monitor found for mid " + mid);
+    return;
+  }
+
+  var function_form = document.getElementById('function_form');
+  if ( !function_form ) {
+    console.error("Unable to find form with id function_form");
+    return;
+  }
+  function_form.elements['newFunction'].value = monitor.Function;
+  function_form.elements['newEnabled'].checked = monitor.Enabled == '1';
+  function_form.elements['mid'].value = mid;
+  document.getElementById('function_monitor_name').innerHTML = monitor.Name;
+
+  $j('#modalFunction').modal('show');
+} // end function manageFunctionModal
+
+function initPage() {
+  reloadWindow.periodical(consoleRefreshTimeout);
   if ( showDonatePopup ) {
-    $j('#donate').modal('show');
+    $j.getJSON(thisUrl + '?request=modal&modal=donate')
+        .done(function(data) {
+          insertModalHtml('donate', data.html);
+          $j('#donate').modal('show');
+          // Manage the Apply button
+          $j('#donateApplyBtn').click(function(evt) {
+            evt.preventDefault();
+            $j('#donateForm').submit();
+          });
+        })
+        .fail(logAjaxFail);
   }
 
   // Makes table sortable
@@ -165,23 +206,8 @@ function initPage() {
   // Setup the thumbnail video animation
   initThumbAnimation();
 
-  // Manage the CANCEL modal buttons
-  $j('.funcCancelBtn').click(function(evt) {
-    var mid = evt.currentTarget.getAttribute("data-mid");
-    evt.preventDefault();
-    $j('#modalFunction-'+mid).modal('hide');
-  });
-
-  // Manage the SAVE modal buttons
-  $j('.funcSaveBtn').click(function(evt) {
-    var mid = evt.currentTarget.getAttribute("data-mid");
-    var newFunc = $j("#funcSelect-"+mid).val();
-    var newEnabled = $j('#newEnabled-'+mid).is(':checked') ? 1 : 0;
-    evt.preventDefault();
-    $j.getJSON(thisUrl + '?view=function&action=function&mid='+mid+'&newFunction='+newFunc+'&newEnabled='+newEnabled);
-    window.location.reload(true);
-  });
-}
+  $j('.functionLnk').click(manageFunctionModal);
+} // end function initPage
 
 function applySort(event, ui) {
   var monitor_ids = $j(this).sortable('toArray');
@@ -194,4 +220,4 @@ function applySort(event, ui) {
   ajax.send();
 } // end function applySort(event,ui)
 
-window.addEventListener( 'DOMContentLoaded', initPage );
+$j(document).ready(initPage );

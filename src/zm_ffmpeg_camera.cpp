@@ -664,7 +664,6 @@ int FfmpegCamera::OpenFfmpeg() {
 }  // int FfmpegCamera::OpenFfmpeg()
 
 int FfmpegCamera::Close() {
-  Debug(2, "CloseFfmpeg called.");
 
   mCanCapture = false;
 
@@ -770,6 +769,7 @@ int FfmpegCamera::CaptureAndRecord(
       return -1;
     }
 
+#if 0
     if ( (packet.pts != AV_NOPTS_VALUE) && (packet.pts < -100000) ) {
       // Ignore packets that have crazy negative pts.
       // They aren't supposed to happen.
@@ -788,6 +788,7 @@ int FfmpegCamera::CaptureAndRecord(
     }
     // If we get a good frame, decrease the error count.. We could zero it...
     if ( error_count > 0 ) error_count -= 1;
+#endif
 
     int keyframe = packet.flags & AV_PKT_FLAG_KEY;
     bytes += packet.size;

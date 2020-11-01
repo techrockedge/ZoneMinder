@@ -56,7 +56,7 @@ require_once('includes/Monitor.php');
 if ( 0 and ZM\Logger::fetch()->debugOn() ) {
   ob_start();
   phpinfo(INFO_VARIABLES);
-  ZM\Logger::Debug(ob_get_contents());
+  ZM\Debug(ob_get_contents());
   ob_end_clean();
 }
 
@@ -82,7 +82,7 @@ define('ZM_BASE_URL', '');
 
 require_once('includes/functions.php');
 if ( $_SERVER['REQUEST_METHOD'] == 'OPTIONS' ) {
-  ZM\Logger::Debug('OPTIONS Method, only doing CORS');
+  ZM\Debug('OPTIONS Method, only doing CORS');
   # Add Cross domain access headers
   CORSHeaders();
   return;
@@ -183,6 +183,9 @@ $user = null;
 if ( isset($_REQUEST['view']) )
   $view = detaintPath($_REQUEST['view']);
 
+if ( isset($_REQUEST['redirect']) )
+  $redirect = '?view='.detaintPath($_REQUEST['redirect']);
+
 # Add CSP Headers
 $cspNonce = bin2hex(zm_random_bytes(16));
 
@@ -218,25 +221,25 @@ if ( (!$view and !$request) or ($view == 'console') ) {
   check_timezone();
 }
 
-ZM\Logger::Debug("View: $view Request: $request Action: $action User: " . ( isset($user) ? $user['Username'] : 'none' ));
+ZM\Debug("View: $view Request: $request Action: $action User: " . ( isset($user) ? $user['Username'] : 'none' ));
 if (
   ZM_ENABLE_CSRF_MAGIC &&
   ( $action != 'login' ) &&
-  ( $view != 'view_video' ) &&
-  ( $view != 'image' ) &&
+  ( $view != 'view_video' ) && // only video no html
+  ( $view != 'image' ) && // view=image doesn't return html, just image data.
   ( $request != 'control' ) && 
-  ( $view != 'frames' ) && 
-  ( $view != 'archive' )
+  //( $view != 'frames' ) &&  // big html can overflow ob
+  ( $view != 'archive' ) // returns data
 ) {
   require_once('includes/csrf/csrf-magic.php');
-  #ZM\Logger::Debug("Calling csrf_check with the following values: \$request = \"$request\", \$view = \"$view\", \$action = \"$action\"");
+  #ZM\Debug("Calling csrf_check with the following values: \$request = \"$request\", \$view = \"$view\", \$action = \"$action\"");
   csrf_check();
 }
 
 # Need to include actions because it does auth
 if ( $action and !$request ) {
   if ( file_exists('includes/actions/'.$view.'.php') ) {
-    ZM\Logger::Debug("Including includes/actions/$view.php");
+    ZM\Debug("Including includes/actions/$view.php");
     require_once('includes/actions/'.$view.'.php');
   } else {
     ZM\Warning("No includes/actions/$view.php for action $action");
@@ -251,7 +254,7 @@ if ( ZM_OPT_USE_AUTH and (!isset($user)) and ($view != 'login') and ($view != 'n
     header('HTTP/1.1 401 Unauthorized');
     exit;
   }
-  ZM\Logger::Debug('Redirecting to login');
+  ZM\Debug('Redirecting to login');
   $view = 'none';
   $redirect = ZM_BASE_URL.$_SERVER['PHP_SELF'].'?view=login';
   if ( ! $request ) {
@@ -266,10 +269,9 @@ if ( ZM_OPT_USE_AUTH and (!isset($user)) and ($view != 'login') and ($view != 'n
   $request = null;
 }
 
-CSPHeaders($view, $cspNonce);
 
 if ( $redirect ) {
-  ZM\Logger::Debug("Redirecting to $redirect");
+  ZM\Debug("Redirecting to $redirect");
   header('Location: '.$redirect);
   return;
 }
@@ -284,6 +286,7 @@ if ( $request ) {
 }
 
 if ( $includeFiles = getSkinIncludes('views/'.$view.'.php', true, true) ) {
+  ob_start();
   foreach ( $includeFiles as $includeFile ) {
     if ( !file_exists($includeFile) )
       ZM\Fatal("View '$view' does not exist");
@@ -297,6 +300,9 @@ if ( $includeFiles = getSkinIncludes('views/'.$view.'.php', true, true) ) {
     foreach ( getSkinIncludes('views/login.php', true, true) as $includeFile )
       require_once $includeFile;
   }
+
+  CSPHeaders($view, $cspNonce);
+  ob_end_flush();
 }
 // If the view is missing or the view still returned error with the user logged in,
 // then it is not recoverable.

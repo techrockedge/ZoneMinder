@@ -54,11 +54,13 @@ class EventStream : public StreamBase {
       uint64_t  event_id;
       unsigned int    monitor_id;
       unsigned long   storage_id;
-      unsigned long   frame_count;
+      unsigned long   frame_count;    // Value of Frames column in Event
+      unsigned long   last_frame_id;  // Highest frame id known about. Can be < frame_count in incomplete events
       time_t          start_time;
+      time_t          end_time;
       double          duration;
       char            path[PATH_MAX];
-      int             n_frames;
+      int             n_frames;       // # of frame rows returned from database
       FrameData       *frames;
       char            video_file[PATH_MAX];
       Storage::Schemes  scheme;
@@ -74,7 +76,7 @@ class EventStream : public StreamBase {
     StreamMode mode;
     bool forceEventChange;
 
-    int curr_frame_id;
+    unsigned long curr_frame_id;
     double curr_stream_time;
     bool  send_frame;
     struct timeval start;     // clock time when started the event
@@ -134,6 +136,8 @@ class EventStream : public StreamBase {
     void runStream();
     Image *getImage();
   private:
+    bool send_file( const char *file_path );
+    bool send_buffer( uint8_t * buffer, int size );
     Storage *storage;
     FFmpeg_Input  *ffmpeg_input;
     AVCodecContext *input_codec_context;

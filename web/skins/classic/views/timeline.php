@@ -142,8 +142,11 @@ if ( !empty($user['MonitorIds']) ) {
 }
 
 $tree = false;
-if ( isset($_REQUEST['filter']) )
-  $tree = parseFilterToTree($_REQUEST['filter']['Query']);
+if ( isset($_REQUEST['filter']) ) {
+  $filter =  ZM\Filter::parse($_REQUEST['filter']);
+  $tree = $filter->tree();
+  ZM\Warning("Parse tree: " . print_r($tree,true));
+}
 
 if ( isset($_REQUEST['range']) )
   $range = validHtmlStr($_REQUEST['range']);
@@ -497,7 +500,7 @@ for ( $i = 0; $i < $chart['graph']['width']; $i++ ) {
   } # end foreach MonitorId
 }  # end foreach x
 
-//ZM\Logger::Debug(print_r( $monEventSlots,true ));
+//ZM\Debug(print_r( $monEventSlots,true ));
 //print_r( $monFrameSlots );
 //print_r( $chart );
 
@@ -811,5 +814,4 @@ foreach( array_keys($monEventSlots) as $monitorId ) {
       </div>
     </div>
   </div>
-</body>
-</html>
+<?php xhtmlFooter() ?>

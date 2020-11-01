@@ -135,6 +135,10 @@ class Event extends ZM_Object {
       Error('Event delete on event with empty Id');
       return;
     }
+    if ( $this->{'Archived'} ) {
+      Error('Cannot delete an Archived event.');
+      return;
+    }
     if ( ZM_OPT_FAST_DELETE ) {
       dbQuery('DELETE FROM Events WHERE Id = ?', array($this->{'Id'}));
       return;
@@ -287,7 +291,7 @@ class Event extends ZM_Object {
 	# The idea here is that we don't really want to use the analysis jpeg as the thumbnail.  
 	# The snapshot image will be generated during capturing
     if ( file_exists($this->Path().'/snapshot.jpg') ) {
-      Logger::Debug("snapshot exists");
+      Debug("snapshot exists");
       $frame = null;
     } else {
       # Load the frame with the highest score to use as a thumbnail
@@ -392,14 +396,14 @@ class Event extends ZM_Object {
 
     if ( $frame and !is_array($frame) ) {
       # Must be an Id
-      Logger::Debug("Assuming that $frame is an Id");
+      Debug("Assuming that $frame is an Id");
       $frame = array('FrameId'=>$frame, 'Type'=>'', 'Delta'=>0);
     }
 
     if ( ( !$frame ) and file_exists($eventPath.'/snapshot.jpg') ) {
       # No frame specified, so look for a snapshot to use
       $captImage = 'snapshot.jpg';
-      Logger::Debug('Frame not specified, using snapshot');
+      Debug('Frame not specified, using snapshot');
       $frame = array('FrameId'=>'snapshot', 'Type'=>'', 'Delta'=>0);
     } else {
       $captImage = sprintf('%0'.ZM_EVENT_IMAGE_DIGITS.'d-analyze.jpg', $frame['FrameId']);
@@ -417,11 +421,11 @@ class Event extends ZM_Object {
               
             #$command ='ffmpeg -v 0 -i '.$videoPath.' -vf "select=gte(n\\,'.$frame['FrameId'].'),setpts=PTS-STARTPTS" '.$eventPath.'/'.$captImage;
             $command ='ffmpeg -ss '. $frame['Delta'] .' -i '.$videoPath.' -frames:v 1 '.$eventPath.'/'.$captImage;
-            Logger::Debug('Running '.$command);
+            Debug('Running '.$command);
             $output = array();
             $retval = 0;
             exec($command, $output, $retval);
-            Logger::Debug("Retval: $retval, output: " . implode("\n", $output));
+            Debug("Retval: $retval, output: " . implode("\n", $output));
           } else {
             Error('Can\'t create frame images from video because there is no video file for event '.$Event->Id().' at ' .$Event->Path());
           }
@@ -525,7 +529,7 @@ class Event extends ZM_Object {
           return;
         }
       }
-      Logger::Debug("sending command to $url");
+      Debug("sending command to $url");
       // use key 'http' even if you send the request to https://...
       $options = array(
           'http' => array(
@@ -541,7 +545,7 @@ class Event extends ZM_Object {
           Error("Error restarting zmc using $url");
         }
         $event_data = json_decode($result,true);
-        Logger::Debug(print_r($event_data['event']['Event'],1));
+        Debug(print_r($event_data['event']['Event'],1));
         return $event_data['event']['Event']['fileExists'];
       } catch ( Exception $e ) {
         Error("Except $e thrown trying to get event data");
@@ -573,7 +577,7 @@ class Event extends ZM_Object {
           return;
         }
       }
-      Logger::Debug("sending command to $url");
+      Debug("sending command to $url");
       // use key 'http' even if you send the request to https://...
       $options = array(
           'http' => array(
@@ -589,7 +593,7 @@ class Event extends ZM_Object {
           Error("Error restarting zmc using $url");
         }
         $event_data = json_decode($result,true);
-        Logger::Debug(print_r($event_data['event']['Event'], 1));
+        Debug(print_r($event_data['event']['Event'], 1));
         return $event_data['event']['Event']['fileSize'];
       } catch ( Exception $e ) {
         Error("Except $e thrown trying to get event data");

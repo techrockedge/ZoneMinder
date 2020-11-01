@@ -50,7 +50,7 @@ class FilterTerm {
     }
     if ( isset($term['cbr']) ) {
       if ( (string)(int)$term['cbr'] == $term['cbr'] ) {
-        $this->obr = $term['cbr'];
+        $this->cbr = $term['cbr'];
       } else {
         Warning('Invalid cbr ' . $term['cbr'] . ' in ' . print_r($term, true));
       }
@@ -61,7 +61,7 @@ class FilterTerm {
   public function sql_values() {
     $values = array();
     if ( !isset($this->val) ) {
-      Logger::Warning("No value in term ");
+      Logger::Warning('No value in term'.$this->attr);
       return $values;
     }
 
@@ -73,7 +73,12 @@ class FilterTerm {
         $value = '(SELECT * FROM Stats WHERE EventId=E.Id AND ZoneId='.$value.')';
         break;
       case 'ExistsInFileSystem':
+        $value = '';
         break;
+      case 'DiskSpace':
+        $value = '';
+        break;
+      case 'MonitorName':
       case 'MonitorName':
       case 'Name':
       case 'Cause':
@@ -136,9 +141,14 @@ class FilterTerm {
   } # end function sql_values
 
   public function sql_operator() {
-    if ( $this->attr == 'AlarmZoneId' ) {
+    switch ( $this->attr ) {
+    case 'AlarmZoneId':
       return ' EXISTS ';
+    case 'ExistsInFileSystem':
+    case 'DiskSpace':
+      return '';
     }
+
 
     switch ( $this->op ) {
     case '=' :
@@ -175,15 +185,12 @@ class FilterTerm {
       }
       return ' IS NOT ';
     default:
-      ZM\Warning('Invalid operator in filter: ' . print_r($this->op, true));
+      Warning('Invalid operator in filter: ' . print_r($this->op, true));
     } // end switch op
   } # end public function sql_operator
 
   /* Some terms don't have related SQL */
   public function sql() {
-    if ( $this->attr == 'ExistsInFileSystem' ) {
-      return '1';
-    }
 
     $sql = '';
     if ( isset($this->cnj) ) {
@@ -194,6 +201,10 @@ class FilterTerm {
     }
 
     switch ( $this->attr ) {
+    case 'ExistsInFileSystem':
+    case 'DiskSpace':
+      $sql .= 'TRUE /*'.$this->attr.'*/';
+      break;
     case 'MonitorName':
       $sql .= 'M.Name';
       break;
@@ -251,7 +262,7 @@ class FilterTerm {
       break;
     case 'Id':
     case 'Name':
-    case 'DiskSpace':
+    case 'EventDiskSpace':
     case 'MonitorId':
     case 'StorageId':
     case 'SecondaryStorageId':
@@ -269,7 +280,7 @@ class FilterTerm {
     }
     $sql .= $this->sql_operator();
     $values = $this->sql_values();
-    if ( count($values) > 1 ) {
+    if ( (count($values) > 1) or ($this->op == 'IN') or ($this->op == 'NOT IN') ) {
       $sql .= '('.join(',', $values).')';
     } else {
       $sql .= $values[0];
@@ -281,19 +292,19 @@ class FilterTerm {
     return $sql;
   } # end public function sql
 
-  public function querystring($querySep='&amp;') {
+  public function querystring($objectname='filter', $querySep='&amp;') {
     # We don't validate the term parameters here
     $query = '';
     if ( $this->cnj ) 
-      $query .= $querySep.urlencode('filter[Query][terms]['.$this->index.'][cnj]').'='.$this->cnj;
+      $query .= $querySep.urlencode($objectname.'[Query][terms]['.$this->index.'][cnj]').'='.$this->cnj;
     if ( $this->obr )
-      $query .= $querySep.urlencode('filter[Query][terms]['.$this->index.'][obr]').'='.$this->obr;
+      $query .= $querySep.urlencode($objectname.'[Query][terms]['.$this->index.'][obr]').'='.$this->obr;
 
-    $query .= $querySep.urlencode('filter[Query][terms]['.$this->index.'][attr]').'='.urlencode($this->attr);
-    $query .= $querySep.urlencode('filter[Query][terms]['.$this->index.'][op]').'='.urlencode($this->op);
-    $query .= $querySep.urlencode('filter[Query][terms]['.$this->index.'][val]').'='.urlencode($this->val);
+    $query .= $querySep.urlencode($objectname.'[Query][terms]['.$this->index.'][attr]').'='.urlencode($this->attr);
+    $query .= $querySep.urlencode($objectname.'[Query][terms]['.$this->index.'][op]').'='.urlencode($this->op);
+    $query .= $querySep.urlencode($objectname.'[Query][terms]['.$this->index.'][val]').'='.urlencode($this->val);
     if ( $this->cbr )
-      $query .= $querySep.urlencode('filter[Query][terms]['.$this->index.'][cbr]').'='.$this->cbr;
+      $query .= $querySep.urlencode($objectname.'[Query][terms]['.$this->index.'][cbr]').'='.$this->cbr;
     return $query;
   } # end public function querystring
 
@@ -318,13 +329,14 @@ class FilterTerm {
   public function test($event=null) {
     if ( !isset($event) ) {
       # Is a Pre Condition
+      Debug("Testing " . $this->attr);
       if ( $this->attr == 'DiskPercent' ) {
         # The logic on this is really ugly.  We are going to treat it as an OR
         foreach ( $this->filter->get_StorageAreas() as $storage ) {
           $string_to_eval = 'return $storage->disk_usage_percent() '.$this->op.' '.$this->val.';';
           try {
             $ret = eval($string_to_eval);
-            Logger::Debug("Evalled $string_to_eval = $ret");
+            Debug("Evalled $string_to_eval = $ret");
             if ( $ret )
               return true;
           } catch ( Throwable $t ) {
@@ -336,7 +348,7 @@ class FilterTerm {
         $string_to_eval = 'return getLoad() '.$this->op.' '.$this->val.';';
         try {
           $ret = eval($string_to_eval);
-          Logger::Debug("Evalled $string_to_eval = $ret");
+          Debug("Evaled $string_to_eval = $ret");
           if ( $ret )
             return true;
         } catch ( Throwable $t ) {
@@ -362,7 +374,7 @@ class FilterTerm {
         $string_to_eval = 'return $event->Storage()->disk_usage_percent() '.$this->op.' '.$this->val.';';
         try {
           $ret = eval($string_to_eval);
-          Logger::Debug("Evalled $string_to_eval = $ret");
+          Debug("Evalled $string_to_eval = $ret");
           if ( $ret )
             return true;
         } catch ( Throwable $t ) {
@@ -373,7 +385,7 @@ class FilterTerm {
         $string_to_eval = 'return $event->Storage()->disk_usage_blocks() '.$this->op.' '.$this->val.';';
         try {
           $ret = eval($string_to_eval);
-          Logger::Debug("Evalled $string_to_eval = $ret");
+          Debug("Evalled $string_to_eval = $ret");
           if ( $ret )
             return true;
         } catch ( Throwable $t ) {
