@@ -1,19 +1,21 @@
-var periodical_id;
+var intervalId;
+var pauseBtn = $j('#pauseBtn');
+var playBtn = $j('#playBtn');
 
 function nextCycleView() {
   window.location.replace('?view=cycle&mid='+nextMid+'&mode='+mode, cycleRefreshTimeout);
 }
 
 function cyclePause() {
-  $clear(periodical_id);
-  $('pauseBtn').disabled = true;
-  $('playBtn').disabled = false;
+  clearInterval(intervalId);
+  pauseBtn.prop('disabled', true);
+  playBtn.prop('disabled', false);
 }
 
 function cycleStart() {
-  periodical_id = nextCycleView.periodical(cycleRefreshTimeout);
-  $('pauseBtn').disabled = false;
-  $('playBtn').disabled = true;
+  intervalId = setInterval(nextCycleView, cycleRefreshTimeout);
+  pauseBtn.prop('disabled', false);
+  playBtn.prop('disabled', true);
 }
 
 function cycleNext() {
@@ -39,14 +41,14 @@ function cyclePrev() {
 }
 
 function initCycle() {
-  periodical_id = nextCycleView.periodical(cycleRefreshTimeout);
+  intervalId = setInterval(nextCycleView, cycleRefreshTimeout);
   var scale = $j('#scale').val();
   if ( scale == '0' || scale == 'auto' ) changeScale();
 }
 
 function changeSize() {
-  var width = $('width').get('value');
-  var height = $('height').get('value');
+  var width = $j('#width').val();
+  var height = $j('#height').val();
 
   // Scale the frame
   monitor_frame = $j('#imageFeed');
@@ -62,7 +64,7 @@ function changeSize() {
   }
 
   /* Stream could be an applet so can't use moo tools */
-  var streamImg = $('liveStream'+monitorData[monIdx].id);
+  var streamImg = document.getElementById('liveStream'+monitorData[monIdx].id);
   if ( streamImg ) {
     if ( streamImg.nodeName == 'IMG' ) {
       var src = streamImg.src;
@@ -78,19 +80,19 @@ function changeSize() {
   } else {
     console.log('Did not find liveStream'+monitorData[monIdx].id);
   }
-  $('scale').set('value', '');
-  Cookie.write('zmCycleScale', '', {duration: 10*365, samesite: 'strict'});
-  Cookie.write('zmCycleWidth', width, {duration: 10*365, samesite: 'strict'});
-  Cookie.write('zmCycleHeight', height, {duration: 10*365, samesite: 'strict'});
+  $j('#scale').val('');
+  setCookie('zmCycleScale', '', 3600);
+  setCookie('zmCycleWidth', width, 3600);
+  setCookie('zmCycleHeight', height, 3600);
 } // end function changeSize()
 
 function changeScale() {
-  var scale = $('scale').get('value');
-  $('width').set('value', 'auto');
-  $('height').set('value', 'auto');
-  Cookie.write('zmCycleScale', scale, {duration: 10*365, samesite: 'strict'});
-  Cookie.write('zmCycleWidth', 'auto', {duration: 10*365, samesite: 'strict'});
-  Cookie.write('zmCycleHeight', 'auto', {duration: 10*365, samesite: 'strict'});
+  var scale = $j('#scale').val();
+  $j('#width').val('auto');
+  $j('#height').val('auto');
+  setCookie('zmCycleScale', scale, 3600);
+  setCookie('zmCycleWidth', 'auto', 3600);
+  setCookie('zmCycleHeight', 'auto', 3600);
   var newWidth = ( monitorData[monIdx].width * scale ) / SCALE_BASE;
   var newHeight = ( monitorData[monIdx].height * scale ) / SCALE_BASE;
 
@@ -153,4 +155,4 @@ function changeScale() {
   }
 } // end function changeScale()
 
-window.addEventListener('DOMContentLoaded', initCycle);
+$j(document).ready(initCycle);

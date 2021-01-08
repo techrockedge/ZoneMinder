@@ -109,7 +109,6 @@ if ( file_exists("skins/$skin/css/$css/graphics/favicon.ico") ) {
 }
 echo output_cache_busted_stylesheet_links(array(
   'css/reset.css',
-  'css/overlay.css',
   'css/font-awesome.min.css',
   'css/bootstrap.min.css',
   'css/bootstrap-table.min.css',
@@ -502,11 +501,11 @@ function getBandwidthHTML($bandwidth_options, $user) {
   $result .= '<div class="dropdown-menu" aria-labelledby="dropdown_bandwidth">'.PHP_EOL;  
   if ( count($bandwidth_options) > 1 ) {
     if ( isset($bandwidth_options['high']) )
-      $result .= '<a data-pdsa-dropdown-val="high" class="dropdown-item" href="#">' .translate('High'). '</a>'.PHP_EOL;
+      $result .= '<a data-pdsa-dropdown-val="high" class="dropdown-item bwselect" href="#">' .translate('High'). '</a>'.PHP_EOL;
     if ( isset($bandwidth_options['medium']) )
-      $result .= '<a data-pdsa-dropdown-val="medium" class="dropdown-item" href="#">' .translate('Medium'). '</a>'.PHP_EOL;
+      $result .= '<a data-pdsa-dropdown-val="medium" class="dropdown-item bwselect" href="#">' .translate('Medium'). '</a>'.PHP_EOL;
     # low is theoretically always available
-    $result .= '<a data-pdsa-dropdown-val="low" class="dropdown-item" href="#">' .translate('Low'). '</a>'.PHP_EOL;    
+    $result .= '<a data-pdsa-dropdown-val="low" class="dropdown-item bwselect" href="#">' .translate('Low'). '</a>'.PHP_EOL;    
   }
   $result .= '</div>'.PHP_EOL;
 
@@ -862,7 +861,6 @@ function xhtmlFooter() {
   global $skin;
   global $basename;
   $skinJsPhpFile = getSkinFile('js/skin.js.php');
-  $cssJsFile = getSkinFile('js/'.$css.'.js');
   $viewJsFile = getSkinFile('views/js/'.$basename.'.js');
   $viewJsPhpFile = getSkinFile('views/js/'.$basename.'.js.php');
 ?>
@@ -871,13 +869,12 @@ function xhtmlFooter() {
   <script src="tools/mootools/mootools-more.js"></script>
   <script src="js/mootools.ext.js"></script>
 <?php } ?>
-  <script src="skins/<?php echo $skin; ?>/js/jquery.js"></script>
-  <script src="skins/<?php echo $skin; ?>/js/jquery-ui-1.12.1/jquery-ui.js"></script>
+  <script src="skins/<?php echo $skin; ?>/js/jquery.min.js"></script>
+  <script src="skins/<?php echo $skin; ?>/js/jquery-ui-1.12.1/jquery-ui.min.js"></script>
   <script src="skins/<?php echo $skin; ?>/js/bootstrap.min.js"></script>
 <?php echo output_script_if_exists(array(
   'js/bootstrap-table.min.js',
   'js/bootstrap-table-locale-all.min.js',
-  'js/tableExport.min.js',
   'js/bootstrap-table-export.min.js',
   'js/bootstrap-table-page-jump-to.min.js',
   'js/bootstrap-table-cookie.min.js',
@@ -913,15 +910,6 @@ function xhtmlFooter() {
 ?>
   </script>
 <?php
-	if ( $cssJsFile ) {
-?>
-  <script src="<?php echo cache_bust($cssJsFile) ?>"></script>
-<?php
-  } else {
-?>
-  <script src="<?php echo cache_bust('skins/classic/js/base.js') ?>"></script>
-<?php
-  }
   if ( $viewJsFile ) {
 ?>
   <script src="<?php echo cache_bust($viewJsFile) ?>"></script>
@@ -931,13 +919,8 @@ function xhtmlFooter() {
 ?>
   <script src="<?php echo cache_bust($skinJsFile) ?>"></script>
   <script src="<?php echo cache_bust('js/logger.js')?>"></script>
-<?php 
-  if ($basename == 'watch' or $basename == 'log' ) {
-  // This is used in the log popup for the export function. Not sure if it's used anywhere else
-?>
-    <script src="<?php echo cache_bust('js/overlay.js') ?>"></script>
 <?php
-  } else if ( $basename == 'monitor' ) {
+  if ( $basename == 'monitor' ) {
     echo output_script_if_exists(array('js/leaflet/leaflet.js'), false);
   } ?>
   <script nonce="<?php echo $cspNonce; ?>">$j('.chosen').chosen();</script>

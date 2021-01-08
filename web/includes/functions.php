@@ -1003,10 +1003,18 @@ function parseSort($saveToSession=false, $querySep='&amp;') {
       $sortColumn = 'E.DiskSpace';
       break;
     case 'StartTime' :
+      # legacy
+      $_REQUEST['sort_field'] = 'StartDateTime';
+      $sortColumn = 'E.StartDateTime';
+      break;
     case 'StartDateTime' :
       $sortColumn = 'E.StartDateTime';
       break;
     case 'EndTime' :
+      #legacy
+      $_REQUEST['sort_field'] = 'EndDateTime';
+      $sortColumn = 'E.EndDateTime';
+      break;
     case 'EndDateTime' :
       $sortColumn = 'E.EndDateTime';
       break;
@@ -1192,8 +1200,8 @@ function sortHeader($field, $querySep='&amp;') {
     '?view='.$view,
     'page=1'.(isset($_REQUEST['filter'])?$_REQUEST['filter']['query']:''),
     'sort_field='.$field,
-    'sort_asc='.($_REQUEST['sort_field'] == $field ? !$_REQUEST['sort_asc'] : 0),
-    'limit='.validInt($_REQUEST['limit']),
+    'sort_asc='.( ( isset($_REQUEST['sort_field']) and ( $_REQUEST['sort_field'] == $field ) ) ? !$_REQUEST['sort_asc'] : 0),
+    'limit='.(isset($_REQUEST['limit']) ? validInt($_REQUEST['limit']) : ''),
     (isset($_REQUEST['eid']) ? 'eid='.$_REQUEST['eid'] : '' ),
   ));
 }
@@ -2141,14 +2149,15 @@ function folder_size($dir) {
 } // end function folder_size
 
 function human_filesize($size, $precision = 2) {
-  $units = array('B','kB','MB','GB','TB','PB','EB','ZB','YB');
+  $units = array('B ','kB','MB','GB','TB','PB','EB','ZB','YB');
   $step = 1024;
   $i = 0;
   while (($size / $step) > 0.9) {
     $size = $size / $step;
     $i++;
   }
-  return round($size, $precision).$units[$i];
+  # The idea is that we can right align this and have the digits columns line up nicely.
+  return sprintf('%.'.$precision.'f', round($size, $precision)).$units[$i];
 }
 
 function csrf_startup() {

@@ -71,9 +71,6 @@ function initPage() {
   var backBtn = $j('#backBtn');
   var onvifBtn = $j('#onvifBtn');
 
-  //var protocolSelector = $('contentForm').elements['newMonitor[Protocol]'];
-  //if ( $(protocolSelector).getTag() == 'select' )
-  //updateMethods( $(protocolSelector) );
   document.querySelectorAll('input[name="newMonitor[SignalCheckColour]"]').forEach(function(el) {
     el.oninput = function(event) {
       $j('#SignalCheckSwatch').css('background-color', event.target.value);
@@ -144,6 +141,24 @@ function initPage() {
   });
   document.querySelectorAll('input[name="newMonitor[ImageBufferCount]"],input[name="newMonitor[Width]"],input[name="newMonitor[Height]"]').forEach(function(el) {
     el.oninput = window['update_estimated_ram_use'].bind(el);
+  });
+
+  document.querySelectorAll('select[name="newMonitor[Function]"]').forEach(function(el) {
+    el.onchange = function() {
+      $j('#function_help div').hide();
+      $j('#'+this.value+'Help').show();
+      if ( this.value == 'Monitor' || this.value == 'None' ) {
+        $j('#FunctionEnabled').hide();
+      } else {
+        $j('#FunctionEnabled').show();
+      }
+      if ( this.value == 'Record' || this.value == 'Nodect' ) {
+        $j('#FunctionDecodingEnabled').show();
+      } else {
+        $j('#FunctionDecodingEnabled').hide();
+      }
+    };
+    el.onchange();
   });
 
   $j('.chosen').chosen();

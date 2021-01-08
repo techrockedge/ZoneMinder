@@ -241,7 +241,7 @@ if ( currentView != 'none' && currentView != 'login' ) {
   $j(document).ready(function() {
     // Load the Logout and State modals into the dom
     $j('#logoutButton').click(clickLogout);
-    if ( canEditSystem ) $j('#stateModalBtn').click(getStateModal);
+    if ( canEdit.System ) $j('#stateModalBtn').click(getStateModal);
 
     // Trigger autorefresh of the widget bar stats on the navbar
     if ( $j('.navbar').length ) {
@@ -273,10 +273,10 @@ if ( currentView != 'none' && currentView != 'login' ) {
       var flip = $j("#flip");
       if ( flip.html() == 'keyboard_arrow_up' ) {
         flip.html('keyboard_arrow_down');
-        Cookie.write('zmHeaderFlip', 'down', {duration: 10*365, samesite: 'strict'} );
+        setCookie('zmHeaderFlip', 'down', 3600);
       } else {
         flip.html('keyboard_arrow_up');
-        Cookie.write('zmHeaderFlip', 'up', {duration: 10*365, samesite: 'strict'} );
+        setCookie('zmHeaderFlip', 'up', 3600);
       }
     });
     // Manage the web console filter bar minimize chevron
@@ -285,10 +285,10 @@ if ( currentView != 'none' && currentView != 'login' ) {
       var fbflip = $j("#fbflip");
       if ( fbflip.html() == 'keyboard_arrow_up' ) {
         fbflip.html('keyboard_arrow_down');
-        Cookie.write('zmFilterBarFlip', 'down', {duration: 10*365, samesite: 'strict'} );
+        setCookie('zmFilterBarFlip', 'down', 3600);
       } else {
         fbflip.html('keyboard_arrow_up');
-        Cookie.write('zmFilterBarFlip', 'up', {duration: 10*365, samesite: 'strict'} );
+        setCookie('zmFilterBarFlip', 'up', 3600);
         $j('.chosen').chosen("destroy");
         $j('.chosen').chosen();
       }
@@ -300,10 +300,10 @@ if ( currentView != 'none' && currentView != 'login' ) {
       var mfbflip = $j("#mfbflip");
       if ( mfbflip.html() == 'keyboard_arrow_up' ) {
         mfbflip.html('keyboard_arrow_down');
-        Cookie.write('zmMonitorFilterBarFlip', 'up', {duration: 10*365, samesite: 'strict'} );
+        setCookie('zmMonitorFilterBarFlip', 'up', 3600);
       } else {
         mfbflip.html('keyboard_arrow_up');
-        Cookie.write('zmMonitorFilterBarFlip', 'down', {duration: 10*365, samesite: 'strict'} );
+        setCookie('zmMonitorFilterBarFlip', 'down', 3600);
         $j('.chosen').chosen("destroy");
         $j('.chosen').chosen();
       }
@@ -437,9 +437,9 @@ function secsToTime( seconds ) {
 
 function submitTab(evt) {
   var tab = this.getAttribute("data-tab-name");
-  var form = $('contentForm');
-  form.action.value = "";
-  form.tab.value = tab;
+  var form = $j('#contentForm');
+  form.attr('action', '');
+  form.attr('tab', tab);
   form.submit();
   evt.preventDefault();
 }
@@ -599,11 +599,11 @@ function scaleToFit(baseWidth, baseHeight, scaleEl, bottomEl) {
   return {width: Math.floor(newWidth), height: Math.floor(newHeight), autoScale: autoScale};
 }
 
-function setButtonState(element_id, butClass) {
-  var element = $(element_id);
+function setButtonState(element_id, btnClass) {
+  var element = document.getElementById(element_id);
   if ( element ) {
-    element.className = butClass;
-    if (butClass == 'unavail' || (butClass == 'active' && (element.id == 'pauseBtn' || element.id == 'playBtn'))) {
+    element.className = btnClass;
+    if (btnClass == 'unavail' || (btnClass == 'active' && (element.id == 'pauseBtn' || element.id == 'playBtn'))) {
       element.disabled = true;
     } else {
       element.disabled = false;
@@ -639,7 +639,7 @@ function delCookie(name) {
 }
 
 function bwClickFunction() {
-  $j("#dropdown_bandwidth a").click(function() {
+  $j('.bwselect').click(function() {
     var bwval = $j(this).data('pdsa-dropdown-val');
     setCookie("zmBandwidth", bwval, 3600);
     getNavBar();
@@ -830,10 +830,11 @@ function startDownload( exportFile ) {
 }
 
 function exportResponse(data, responseText) {
-  console.log(data);
+  console.log('exportResponse data: ' + JSON.stringify(data));
 
   var generated = (data.result=='Ok') ? 1 : 0;
-  var exportFile = '?view=archive&type='+data.exportFormat+'&connkey='+data.connkey;
+  //var exportFile = '?view=archive&type='+data.exportFormat+'&connkey='+data.connkey;
+  var exportFile = data.exportFile;
 
   $j('#exportProgress').removeClass( 'text-warning' );
   if ( generated ) {
@@ -887,4 +888,34 @@ function manageShutdownBtns(element) {
         }
       })
       .fail(logAjaxFail);
+}
+
+function thumbnail_onmouseover(event) {
+  timeout = setTimeout(function() {
+    var img = event.target;
+    var imgClass = ( currentView == 'console' ) ? 'zoom-console' : 'zoom';
+    var imgAttr = ( currentView == 'frames' ) ? 'full_img_src' : 'stream_src';
+    img.src = '';
+    img.src = img.getAttribute(imgAttr);
+    img.addClass(imgClass);
+  }, 350);
+}
+
+function thumbnail_onmouseout(event) {
+  clearTimeout(timeout);
+  var img = event.target;
+  var imgClass = ( currentView == 'console' ) ? 'zoom-console' : 'zoom';
+  var imgAttr = ( currentView == 'frames' ) ? 'img_src' : 'still_src';
+  img.src = '';
+  img.src = img.getAttribute(imgAttr);
+  img.removeClass(imgClass);
+}
+
+function initThumbAnimation() {
+  if ( ANIMATE_THUMBS ) {
+    $j('.colThumbnail img').each(function() {
+      this.addEventListener('mouseover', thumbnail_onmouseover, false);
+      this.addEventListener('mouseout', thumbnail_onmouseout, false);
+    });
+  }
 }

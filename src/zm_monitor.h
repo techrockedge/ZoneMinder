@@ -128,7 +128,8 @@ protected:
     uint8_t signal;             /* +54   */
     uint8_t format;             /* +55   */
     uint32_t imagesize;         /* +56   */
-    uint32_t epadding1;         /* +60   */
+    uint32_t last_frame_score;  /* +60   */
+    // uint32_t epadding1;      /* +60   */
     /* 
      ** This keeps 32bit time_t and 64bit time_t identical and compatible as long as time is before 2038.
      ** Shared memory layout should be identical for both 32bit and 64bit and is multiples of 16.
@@ -158,7 +159,7 @@ protected:
     uint8_t control_state[256];  /* +104   */
 
     char alarm_cause[256];
-    
+
   } SharedData;
 
   typedef enum { TRIGGER_CANCEL, TRIGGER_ON, TRIGGER_OFF } TriggerState;
@@ -236,6 +237,10 @@ protected:
         return last_connect_time;
       }
 
+      inline uint32_t lastFrameScore() {
+        return shared_data->last_frame_score;
+      }
+
       bool connect();
       bool disconnect();
 
@@ -253,6 +258,7 @@ protected:
   CameraType      type;
   Function        function;           // What the monitor is doing
   bool            enabled;            // Whether the monitor is enabled or asleep
+  bool            decoding_enabled;   // Whether the monitor will decode h264/h265 packets
   unsigned int    width;              // Normally the same as the camera, but not if partly rotated
   unsigned int    height;             // Normally the same as the camera, but not if partly rotated
   bool            v4l_multi_buffer;
@@ -313,8 +319,8 @@ protected:
   Image        ref_image;
   Image        alarm_image;  // Used in creating analysis images, will be initialized in Analysis
   Image        write_image;    // Used when creating snapshot images
-  std::string diag_path_r;
-  std::string diag_path_d;
+  std::string diag_path_ref;
+  std::string diag_path_delta;
 
   Purpose      purpose;        // What this monitor has been created to do
   int          event_count;
@@ -378,6 +384,7 @@ public:
     unsigned int p_storage_id,
     int p_function,
     bool p_enabled,
+    bool p_decoding_enabled,
     const char *p_linked_monitors,
     Camera *p_camera,
     int p_orientation,
@@ -424,34 +431,31 @@ public:
   void AddPrivacyBitmask( Zone *p_zones[] );
 
   bool connect();
+  bool disconnect();
 
   inline int ShmValid() const {
     return shared_data && shared_data->valid;
   }
 
-  inline unsigned int Id() const {
-    return id;
-  }
-  inline const char *Name() const {
-    return name;
-  }
+  inline unsigned int Id() const { return id; }
+  inline const char *Name() const { return name; }
+  inline unsigned int ServerId() { return server_id; }
   inline Storage *getStorage() {
     if ( ! storage ) {
       storage = new Storage( storage_id );
     }
     return storage;
   }
-  inline Function GetFunction() const {
-    return( function );
-  }
+  inline Function GetFunction() const { return function; }
   inline bool Enabled() const {
     if ( function <= MONITOR )
       return false;
     return enabled;
   }
-  inline const char *EventPrefix() const {
-    return event_prefix;
+  inline bool DecodingEnabled() const {
+    return decoding_enabled;
   }
+  inline const char *EventPrefix() const { return event_prefix; }
   inline bool Ready() const {
     if ( function <= MONITOR )
       return false;
@@ -462,9 +466,7 @@ public:
       return false;
     return( enabled && shared_data->active );
   }
-  inline bool Exif() const {
-    return embed_exif;
-  }
+  inline bool Exif() const { return embed_exif; }
   Orientation getOrientation() const;
 
   unsigned int Width() const { return width; }

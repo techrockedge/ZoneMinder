@@ -24,7 +24,7 @@ function changeScale() {
     img.css('width', newWidth + 'px');
     img.css('height', newHeight + 'px');
   }
-  Cookie.write('zmWatchScale', scale, {duration: 10*365, samesite: 'strict'});
+  setCookie('zmWatchScale', scale, 3600);
   $j.each(controlsLinks, function(k, anchor) { //Make frames respect scale choices
     if ( anchor ) {
       anchor.prop('href', anchor.prop('href').replace(/scale=.*&/, 'scale=' + scale + '&'));
@@ -39,6 +39,24 @@ if ( !scale ) {
 document.addEventListener('DOMContentLoaded', function onDCL() {
   document.getElementById('scaleControl').addEventListener('change', changeScale);
 });
+
+function getStat(params) {
+  $j.getJSON(thisUrl + '?view=request&request=stats&raw=true', params)
+      .done(function(data) {
+        var stat = data.raw;
+
+        $j('#frameStatsTable').empty().append('<tbody>');
+        $j.each( statHeaderStrings, function( key ) {
+          var th = $j('<th>').addClass('text-right').text(statHeaderStrings[key]);
+          var tdString = ( stat ) ? stat[key] : 'n/a';
+          var td = $j('<td>').text(tdString);
+          var row = $j('<tr>').append(th, td);
+
+          $j('#frameStatsTable tbody').append(row);
+        });
+      })
+      .fail(logAjaxFail);
+}
 
 function initPage() {
   var backBtn = $j('#backBtn');
@@ -65,6 +83,9 @@ function initPage() {
     evt.preventDefault();
     window.location.href = thisUrl+'?view=stats&eid='+eid+'&fid='+fid;
   });
+
+  // Load the frame stats
+  getStat({eid: eid, fid: fid});
 }
 
 $j(document).ready(function() {

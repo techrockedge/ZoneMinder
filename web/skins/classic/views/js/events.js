@@ -58,10 +58,10 @@ function processRows(rows) {
     row.Id = '<a href="?view=event&amp;eid=' + eid + filterQuery + sortQuery + '&amp;page=1">' + eid + '</a>';
     row.Name = '<a href="?view=event&amp;eid=' + eid + filterQuery + sortQuery + '&amp;page=1">' + row.Name + '</a>'
                + '<br/><div class="small text-nowrap text-muted">' + archived + emailed + '</div>';
-    if ( canEditMonitors ) row.Monitor = '<a href="?view=monitor&amp;mid=' + mid + '">' + row.Monitor + '</a>';
-    if ( canEditEvents ) row.Cause = '<a href="#" title="' + row.Notes + '" class="eDetailLink" data-eid="' + eid + '">' + row.Cause + '</a>';
+    if ( canEdit.Monitors ) row.Monitor = '<a href="?view=monitor&amp;mid=' + mid + '">' + row.Monitor + '</a>';
+    if ( canEdit.Events ) row.Cause = '<a href="#" title="' + row.Notes + '" class="eDetailLink" data-eid="' + eid + '">' + row.Cause + '</a>';
     if ( row.Notes.indexOf('detected:') >= 0 ) {
-      row.Cause = row.Cause + '<a href="?view=image&amp;eid=' + eid + '&amp;fid=objdetect"><div class="small text-nowrap text-muted"><u>' + row.Notes + '</u></div></a>';
+      row.Cause = row.Cause + '<a href="#" class="objDetectLink" data-eid=' +eid+ '><div class="small text-nowrap text-muted"><u>' + row.Notes + '</u></div></div></a>';
     } else if ( row.Notes != 'Forced Web: ' ) {
       row.Cause = row.Cause + '<br/><div class="small text-nowrap text-muted">' + row.Notes + '</div>';
     }
@@ -72,25 +72,6 @@ function processRows(rows) {
   });
 
   return rows;
-}
-
-function thumbnail_onmouseover(event) {
-  var img = event.target;
-  img.src = '';
-  img.src = img.getAttribute('stream_src');
-}
-
-function thumbnail_onmouseout(event) {
-  var img = event.target;
-  img.src = '';
-  img.src = img.getAttribute('still_src');
-}
-
-function initThumbAnimation() {
-  $j('.colThumbnail img').each(function() {
-    this.addEventListener('mouseover', thumbnail_onmouseover, false);
-    this.addEventListener('mouseout', thumbnail_onmouseout, false);
-  });
 }
 
 // Returns the event id's of the selected rows
@@ -124,7 +105,7 @@ function getDelConfirmModal() {
 // Manage the DELETE CONFIRMATION modal button
 function manageDelConfirmModalBtns() {
   document.getElementById("delConfirmBtn").addEventListener("click", function onDelConfirmClick(evt) {
-    if ( ! canEditEvents ) {
+    if ( ! canEdit.Events ) {
       enoperm();
       return;
     }
@@ -160,6 +141,15 @@ function getEventDetailModal(eid) {
       .fail(logAjaxFail);
 }
 
+function getObjdetectModal(eid) {
+  $j.getJSON(thisUrl + '?request=modal&modal=objdetect&eid=' + eid)
+      .done(function(data) {
+        insertModalHtml('objdetectModal', data.html);
+        $j('#objdetectModal').modal('show');
+      })
+      .fail(logAjaxFail);
+}
+
 function initPage() {
   // Remove the thumbnail column from the DOM if thumbnails are off globally
   if ( !WEB_LIST_THUMBS ) $j('th[data-field="Thumbnail"]').remove();
@@ -182,13 +172,13 @@ function initPage() {
   function() {
     selections = table.bootstrapTable('getSelections');
 
-    viewBtn.prop('disabled', !(selections.length && canViewEvents));
-    archiveBtn.prop('disabled', !(selections.length && canEditEvents));
-    unarchiveBtn.prop('disabled', !(getArchivedSelections()) && canEditEvents);
-    editBtn.prop('disabled', !(selections.length && canEditEvents));
-    exportBtn.prop('disabled', !(selections.length && canViewEvents));
-    downloadBtn.prop('disabled', !(selections.length && canViewEvents));
-    deleteBtn.prop('disabled', !(selections.length && canEditEvents));
+    viewBtn.prop('disabled', !(selections.length && canView.Events));
+    archiveBtn.prop('disabled', !(selections.length && canEdit.Events));
+    unarchiveBtn.prop('disabled', !(getArchivedSelections()) && canEdit.Events);
+    editBtn.prop('disabled', !(selections.length && canEdit.Events));
+    exportBtn.prop('disabled', !(selections.length && canView.Events));
+    downloadBtn.prop('disabled', !(selections.length && canView.Events));
+    deleteBtn.prop('disabled', !(selections.length && canEdit.Events));
   });
 
   // Don't enable the back button if there is no previous zm page to go back to
@@ -247,7 +237,7 @@ function initPage() {
 
   // Manage the UNARCHIVE button
   document.getElementById("unarchiveBtn").addEventListener("click", function onUnarchiveClick(evt) {
-    if ( ! canEditEvents ) {
+    if ( ! canEdit.Events ) {
       enoperm();
       return;
     }
@@ -265,7 +255,7 @@ function initPage() {
 
   // Manage the EDIT button
   document.getElementById("editBtn").addEventListener("click", function onEditClick(evt) {
-    if ( ! canEditEvents ) {
+    if ( ! canEdit.Events ) {
       enoperm();
       return;
     }
@@ -311,7 +301,7 @@ function initPage() {
 
   // Manage the DELETE button
   document.getElementById("deleteBtn").addEventListener("click", function onDeleteClick(evt) {
-    if ( ! canEditEvents ) {
+    if ( ! canEdit.Events ) {
       enoperm();
       return;
     }
@@ -322,6 +312,13 @@ function initPage() {
 
   // Update table links each time after new data is loaded
   table.on('post-body.bs.table', function(data) {
+    // Manage the Object Detection links in the events list
+    $j(".objDetectLink").click(function(evt) {
+      evt.preventDefault();
+      var eid = $j(this).data('eid');
+      getObjdetectModal(eid);
+    });
+
     // Manage the eventdetail links in the events list
     $j(".eDetailLink").click(function(evt) {
       evt.preventDefault();
@@ -332,7 +329,7 @@ function initPage() {
     var thumb_ndx = $j('#eventTable tr th').filter(function() {
       return $j(this).text().trim() == 'Thumbnail';
     }).index();
-    table.find("tr td:nth-child(" + (thumb_ndx+1) + ")").addClass('colThumbnail zoom');
+    table.find("tr td:nth-child(" + (thumb_ndx+1) + ")").addClass('colThumbnail');
   });
 
   table.bootstrapTable('resetSearch');

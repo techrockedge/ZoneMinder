@@ -295,11 +295,11 @@ function parseRows(rows) {
       inputTds.eq(4).html(storageSelect).children().val(storageVal).chosen({width: "101%"});
     } else if ( attr == 'MonitorName' ) { //Monitor names
       var monitorSelect = $j('<select></select>').attr('name', queryPrefix + rowNum + '][val]').attr('id', queryPrefix + rowNum + '][val]');
-      for ( var monitor_id in monitors ) {
+      sorted_monitor_ids.forEach(function(monitor_id) {
         monitorSelect.append('<option value="' + monitors[monitor_id].Name + '">' + escapeHTML(monitors[monitor_id].Name) + '</option>');
-      }
+      });
       var monitorVal = inputTds.eq(4).children().val();
-      inputTds.eq(4).html(monitorSelect).children().val(monitorVal);
+      inputTds.eq(4).html(monitorSelect).children().val(monitorVal).chosen({width: '101%'});
     } else if ( attr == 'ExistsInFileSystem' ) {
       var select = $j('<select></select>').attr('name', queryPrefix + rowNum + '][val]').attr('id', queryPrefix + rowNum + '][val]');
       for ( var booleanVal in booleanValues ) {
@@ -429,12 +429,12 @@ function manageModalBtns(id) {
   }
 }
 
-function init() {
-  updateButtons( $('executeButton') );
+function initPage() {
+  updateButtons($j('#executeButton')[0]);
   $j('#Id').chosen();
   $j('#fieldsTable select').not("[name$='br\\]'], [name$='cnj\\]']").chosen({width: '101%'}); //Every select except brackets/and
   $j("#sortTable [name$='sort_field\\]']").chosen();
   parseRows($j('#fieldsTable tbody').children());
 }
 
-window.addEventListener( 'DOMContentLoaded', init );
+$j(document).ready(initPage );

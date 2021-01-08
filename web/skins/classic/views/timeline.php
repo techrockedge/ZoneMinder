@@ -145,7 +145,7 @@ $tree = false;
 if ( isset($_REQUEST['filter']) ) {
   $filter =  ZM\Filter::parse($_REQUEST['filter']);
   $tree = $filter->tree();
-  ZM\Warning("Parse tree: " . print_r($tree,true));
+  ZM\Debug('Parse tree: ' . print_r($tree,true));
 }
 
 if ( isset($_REQUEST['range']) )
@@ -742,7 +742,7 @@ function drawSlot($slot,$index) {
 if ( $mode == 'overlay' ) {
   echo drawYGrid( $chart, $majYScale, 'majLabelY', 'majTickY', 'majGridY graphWidth' );
 }
-echo drawXGrid( $chart, $majXScale, 'majLabelX', 'majTickX', 'majGridX graphHeight', 'zoom graphHeight' );
+echo drawXGrid( $chart, $majXScale, 'majLabelX', 'majTickX', 'majGridX graphHeight', 'tlzoom graphHeight' );
 if ( $mode == 'overlay' ) {
 ?>
           <div id="activity" class="activitySize">

@@ -31,11 +31,11 @@ function startDownload(file) {
 
 function exportProgress() {
   if ( exportTimer ) {
-    var tickerText = $('exportProgressTicker').get('text');
+    var tickerText = $j('#exportProgressTicker').text();
     if ( tickerText.length < 1 || tickerText.length > 4 ) {
-      $('exportProgressTicker').set('text', '.');
+      $j('#exportProgressTicker').text('.');
     } else {
-      $('exportProgressTicker').appendText('.');
+      $j('#exportProgressTicker').append('.');
     }
   }
 }
@@ -43,10 +43,10 @@ function exportProgress() {
 function exportResponse(respObj, respText) {
   clearInterval(exportTimer);
   if ( respObj.result != 'Ok' ) {
-    $('exportProgressTicker').set('text', respObj.message);
+    $j('#exportProgressTicker').text(respObj.message);
   } else {
-    $('exportProgressTicker').set('text', exportSucceededString);
-    startDownload.pass(decodeURIComponent(respObj.exportFile)).delay(1500);
+    $j('#exportProgressTicker').text(exportSucceededString);
+    setTimeout(startDownload, 1500, decodeURIComponent(respObj.exportFile));
   }
   return;
 
@@ -64,20 +64,18 @@ function exportResponse(respObj, respText) {
 }
 
 function exportEvents( ) {
-  var parms = 'view=event&request=event&action=export';
-  parms += '&'+$('contentForm').toQueryString();
-  var query = new Request.JSON( {
-    url: thisUrl,
-    method: 'post',
-    data: parms,
-    onSuccess: exportResponse
-  } );
-  query.send();
-  $('exportProgress').removeClass('hidden');
-  $('exportProgress').setProperty('class', 'warnText');
-  $('exportProgressText').set('text', exportProgressString);
+  var formData = $j('#contentForm').serialize();
+
+  $j.getJSON(thisUrl + '?view=event&request=event&action=export', formData)
+      .done(exportResponse)
+      .fail(logAjaxFail);
+
+  $j('#exportProgress').removeClass('hidden');
+  $j('#exportProgress').addClass('warnText');
+  $j('#exportProgress').text(exportProgressString);
+
   //exportProgress();
-  exportTimer = exportProgress.periodical( 500 );
+  exportTimer = setInterval(exportProgress, 500);
 }
 
 function getEventDetailModal(eid) {
@@ -95,9 +93,9 @@ function getEventDetailModal(eid) {
 }
 
 function initPage() {
-  configureExportButton( $('exportButton') );
+  configureExportButton(this);
   if ( exportReady ) {
-    startDownload.pass(exportFile).delay(1500);
+    setTimeout(startDownload, 1500, exportFile);
   }
   document.getElementById('exportButton').addEventListener('click', exportEvents);
 
