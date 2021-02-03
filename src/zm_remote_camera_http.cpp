@@ -87,6 +87,7 @@ RemoteCameraHttp::RemoteCameraHttp(
   if ( capture ) {
     Initialise();
   }
+  mVideoStream = NULL;
 }
 
 RemoteCameraHttp::~RemoteCameraHttp() {
@@ -261,12 +262,12 @@ int RemoteCameraHttp::ReadData( Buffer &buffer, unsigned int bytes_expected ) {
     // There can be lots of bytes available.  I've seen 4MB or more. This will vastly inflate our buffer size unnecessarily.
     if ( total_bytes_to_read > ZM_NETWORK_BUFSIZ ) {
       total_bytes_to_read = ZM_NETWORK_BUFSIZ;
-      Debug(3, "Just getting 32K" );
+      Debug(4, "Just getting 32K" );
     } else {
-      Debug(3, "Just getting %d", total_bytes_to_read );
+      Debug(4, "Just getting %d", total_bytes_to_read );
     }
   } // end if bytes_expected or not
-  Debug( 3, "Expecting %d bytes", total_bytes_to_read );
+  Debug( 4, "Expecting %d bytes", total_bytes_to_read );
 
   int total_bytes_read = 0;
   do {
@@ -337,8 +338,7 @@ int RemoteCameraHttp::GetResponse() {
               header_len = header_expr->MatchLength( 1 );
               Debug(4, "Captured header (%d bytes):\n'%s'", header_len, header);
 
-              if ( status_expr->Match( header, header_len ) < 4 )
-              {
+              if ( status_expr->Match( header, header_len ) < 4 ) {
                 Error( "Unable to extract HTTP status from header" );
                 return( -1 );
               }
@@ -375,55 +375,43 @@ int RemoteCameraHttp::GetResponse() {
               }
               Debug( 3, "Got status '%d' (%s), http version %s", status_code, status_mesg, http_version );
 
-              if ( connection_expr->Match( header, header_len ) == 2 )
-              {
+              if ( connection_expr->Match( header, header_len ) == 2 ) {
                 connection_type = connection_expr->MatchString( 1 );
                 Debug( 3, "Got connection '%s'", connection_type );
               }
 
-              if ( content_length_expr->Match( header, header_len ) == 2 )
-              {
+              if ( content_length_expr->Match( header, header_len ) == 2 ) {
                 content_length = atoi( content_length_expr->MatchString( 1 ) );
                 Debug( 3, "Got content length '%d'", content_length );
               }
 
-              if ( content_type_expr->Match( header, header_len ) >= 2 )
-              {
+              if ( content_type_expr->Match( header, header_len ) >= 2 ) {
                 content_type = content_type_expr->MatchString( 1 );
                 Debug( 3, "Got content type '%s'\n", content_type );
-                if ( content_type_expr->MatchCount() > 2 )
-                {
+                if ( content_type_expr->MatchCount() > 2 ) {
                   content_boundary = content_type_expr->MatchString( 2 );
                   Debug( 3, "Got content boundary '%s'", content_boundary );
                 }
               }
 
-              if ( !strcasecmp( content_type, "image/jpeg" ) || !strcasecmp( content_type, "image/jpg" ) )
-              {
+              if ( !strcasecmp( content_type, "image/jpeg" ) || !strcasecmp( content_type, "image/jpg" ) ) {
                 // Single image
                 mode = SINGLE_IMAGE;
                 format = JPEG;
                 state = CONTENT;
-              }
-              else if ( !strcasecmp( content_type, "image/x-rgb" ) )
-              {
+              } else if ( !strcasecmp( content_type, "image/x-rgb" ) ) {
                 // Single image
                 mode = SINGLE_IMAGE;
                 format = X_RGB;
                 state = CONTENT;
-              }
-              else if ( !strcasecmp( content_type, "image/x-rgbz" ) )
-              {
+              } else if ( !strcasecmp( content_type, "image/x-rgbz" ) ) {
                 // Single image
                 mode = SINGLE_IMAGE;
                 format = X_RGBZ;
                 state = CONTENT;
-              }
-              else if ( !strcasecmp( content_type, "multipart/x-mixed-replace" ) )
-              {
+              } else if ( !strcasecmp( content_type, "multipart/x-mixed-replace" ) ) {
                 // Image stream, so start processing
-                if ( !content_boundary[0] )
-                {
+                if ( !content_boundary[0] ) {
                   Error( "No content boundary found in header '%s'", header );
                   return( -1 );
                 }
@@ -434,15 +422,12 @@ int RemoteCameraHttp::GetResponse() {
               //{
               //// MPEG stream, coming soon!
               //}
-              else
-              {
+              else {
                 Error( "Unrecognised content type '%s'", content_type );
                 return( -1 );
               }
               buffer.consume( header_len );
-            }
-            else
-            {
+            } else {
               Debug( 3, "Unable to extract header from stream, retrying" );
               //return( -1 );
             }
@@ -454,39 +439,33 @@ int RemoteCameraHttp::GetResponse() {
             static RegExpr *subcontent_length_expr = nullptr;
             static RegExpr *subcontent_type_expr = nullptr;
 
-            if ( !subheader_expr )
-            {
+            if ( !subheader_expr ) {
               char subheader_pattern[256] = "";
               snprintf( subheader_pattern, sizeof(subheader_pattern), "^((?:\r?\n){0,2}?(?:--)?%s\r?\n.+?\r?\n\r?\n)", content_boundary );
               subheader_expr = new RegExpr( subheader_pattern, PCRE_DOTALL );
             }
-            if ( subheader_expr->Match( (char *)buffer, (int)buffer ) == 2 )
-            {
+            if ( subheader_expr->Match( (char *)buffer, (int)buffer ) == 2 ) {
               subheader = subheader_expr->MatchString( 1 );
               subheader_len = subheader_expr->MatchLength( 1 );
               Debug( 4, "Captured subheader (%d bytes):'%s'", subheader_len, subheader );
 
               if ( !subcontent_length_expr )
                 subcontent_length_expr = new RegExpr( "Content-length: ?([0-9]+)\r?\n", PCRE_CASELESS );
-              if ( subcontent_length_expr->Match( subheader, subheader_len ) == 2 )
-              {
+              if ( subcontent_length_expr->Match( subheader, subheader_len ) == 2 ) {
                 content_length = atoi( subcontent_length_expr->MatchString( 1 ) );
                 Debug( 3, "Got subcontent length '%d'", content_length );
               }
 
               if ( !subcontent_type_expr )
                 subcontent_type_expr = new RegExpr( "Content-type: ?(.+?)\r?\n", PCRE_CASELESS );
-              if ( subcontent_type_expr->Match( subheader, subheader_len ) == 2 )
-              {
+              if ( subcontent_type_expr->Match( subheader, subheader_len ) == 2 ) {
                 content_type = subcontent_type_expr->MatchString( 1 );
                 Debug( 3, "Got subcontent type '%s'", content_type );
               }
 
               buffer.consume( subheader_len );
               state = CONTENT;
-            }
-            else
-            {
+            } else {
               Debug( 3, "Unable to extract subheader from stream, retrying" );
 							buffer_len = GetData();
               if ( buffer_len < 0 ) {
@@ -506,28 +485,19 @@ int RemoteCameraHttp::GetResponse() {
               *semicolon = '\0';
             }
 
-            if ( !strcasecmp( content_type, "image/jpeg" ) || !strcasecmp( content_type, "image/jpg" ) )
-            {
+            if ( !strcasecmp( content_type, "image/jpeg" ) || !strcasecmp( content_type, "image/jpg" ) ) {
               format = JPEG;
-            }
-            else if ( !strcasecmp( content_type, "image/x-rgb" ) )
-            {
+            } else if ( !strcasecmp( content_type, "image/x-rgb" ) ) {
               format = X_RGB;
-            }
-            else if ( !strcasecmp( content_type, "image/x-rgbz" ) )
-            {
+            } else if ( !strcasecmp( content_type, "image/x-rgbz" ) ) {
               format = X_RGBZ;
-            }
-            else
-            {
+            } else {
               Error( "Found unsupported content type '%s'", content_type );
               return( -1 );
             }
 
-            if ( content_length )
-            {
-              while ( ((long)buffer.size() < content_length ) && ! zm_terminate )
-              {
+            if ( content_length ) {
+              while ( ((long)buffer.size() < content_length ) && ! zm_terminate ) {
                 Debug(3, "Need more data buffer %d < content length %d", buffer.size(), content_length );
 								int bytes_read = GetData();
 
@@ -538,11 +508,8 @@ int RemoteCameraHttp::GetResponse() {
 								bytes += bytes_read;
               }
               Debug( 3, "Got end of image by length, content-length = %d", content_length );
-            }
-            else
-            {
-              while ( !content_length )
-              {
+            } else {
+              while ( !content_length ) {
 								buffer_len = GetData();
                 if ( buffer_len < 0 ) {
                   Error( "Unable to read content" );
@@ -550,16 +517,13 @@ int RemoteCameraHttp::GetResponse() {
                 }
 								bytes += buffer_len;
                 static RegExpr *content_expr = 0;
-                if ( mode == MULTI_IMAGE )
-                {
-                  if ( !content_expr )
-                  {
+                if ( mode == MULTI_IMAGE ) {
+                  if ( !content_expr ) {
                     char content_pattern[256] = "";
                     snprintf( content_pattern, sizeof(content_pattern), "^(.+?)(?:\r?\n)*(?:--)?%s\r?\n", content_boundary );
                     content_expr = new RegExpr( content_pattern, PCRE_DOTALL );
                   }
-                  if ( content_expr->Match( buffer, buffer.size() ) == 2 )
-                  {
+                  if ( content_expr->Match( buffer, buffer.size() ) == 2 ) {
                     content_length = content_expr->MatchLength( 1 );
                     Debug( 3, "Got end of image by pattern, content-length = %d", content_length );
                   }
@@ -600,17 +564,17 @@ int RemoteCameraHttp::GetResponse() {
     static int authenticate_match_len = 0;
 
     if ( !http_match_len )
-      http_match_len = strlen( http_match );
+      http_match_len = strlen(http_match);
     if ( !connection_match_len )
-      connection_match_len = strlen( connection_match );
+      connection_match_len = strlen(connection_match);
     if ( !content_length_match_len )
-      content_length_match_len = strlen( content_length_match );
+      content_length_match_len = strlen(content_length_match);
     if ( !content_type_match_len )
-      content_type_match_len = strlen( content_type_match );
+      content_type_match_len = strlen(content_type_match);
     if ( !boundary_match_len )
-      boundary_match_len = strlen( boundary_match );
+      boundary_match_len = strlen(boundary_match);
     if ( !authenticate_match_len )
-      authenticate_match_len = strlen( authenticate_match );
+      authenticate_match_len = strlen(authenticate_match);
 
     static int n_headers;
     //static char *headers[32];
@@ -637,7 +601,7 @@ int RemoteCameraHttp::GetResponse() {
     static int content_boundary_len;
 
     while ( !zm_terminate ) {
-      switch( state ) {
+      switch ( state ) {
         case HEADER :
           {
             n_headers = 0;
@@ -670,14 +634,18 @@ int RemoteCameraHttp::GetResponse() {
             int header_len = buffer.size();
             bool all_headers = false;
 
-            while( true ) {
+            while ( true ) {
               int crlf_len = memspn(header_ptr, "\r\n", header_len);
               if ( n_headers ) {
-                if ( (crlf_len == 2 && !strncmp( header_ptr, "\n\n", crlf_len )) || (crlf_len == 4 && !strncmp( header_ptr, "\r\n\r\n", crlf_len )) ) {
+                if (
+                    (crlf_len == 2 && !strncmp(header_ptr, "\n\n", crlf_len ))
+                    ||
+                    (crlf_len == 4 && !strncmp( header_ptr, "\r\n\r\n", crlf_len ))
+                    ) {
 									Debug(3, "Have double linefeed, done headers");
                   *header_ptr = '\0';
                   header_ptr += crlf_len;
-                  header_len -= buffer.consume( header_ptr-(char *)buffer );
+                  header_len -= buffer.consume(header_ptr-(char *)buffer);
                   all_headers = true;
                   break;
                 }
@@ -688,35 +656,35 @@ int RemoteCameraHttp::GetResponse() {
                 } else {
                   *header_ptr = '\0';
                   header_ptr += crlf_len;
-                  header_len -= buffer.consume( header_ptr-(char *)buffer );
+                  header_len -= buffer.consume(header_ptr-(char *)buffer);
                 }
               }
 
-              Debug( 6, "%s", header_ptr );
-              if ( (crlf = mempbrk( header_ptr, "\r\n", header_len )) ) {
+              Debug(6, "%s", header_ptr);
+              if ( (crlf = mempbrk(header_ptr, "\r\n", header_len)) ) {
                 //headers[n_headers++] = header_ptr;
                 n_headers++;
 
-                if ( !http_header && (strncasecmp( header_ptr, http_match, http_match_len ) == 0) ) {
+                if ( !http_header && (strncasecmp(header_ptr, http_match, http_match_len) == 0) ) {
                   http_header = header_ptr+http_match_len;
                   Debug( 6, "Got http header '%s'", header_ptr );
-                } else if ( !connection_header && (strncasecmp( header_ptr, connection_match, connection_match_len) == 0) ) {
+                } else if ( !connection_header && (strncasecmp(header_ptr, connection_match, connection_match_len) == 0) ) {
                   connection_header = header_ptr+connection_match_len;
                   Debug( 6, "Got connection header '%s'", header_ptr );
-                } else if ( !content_length_header && (strncasecmp( header_ptr, content_length_match, content_length_match_len) == 0) ) {
+                } else if ( !content_length_header && (strncasecmp(header_ptr, content_length_match, content_length_match_len) == 0) ) {
                   content_length_header = header_ptr+content_length_match_len;
                   Debug( 6, "Got content length header '%s'", header_ptr );
-                } else if ( !authenticate_header && (strncasecmp( header_ptr, authenticate_match, authenticate_match_len) == 0) ) {
+                } else if ( !authenticate_header && (strncasecmp(header_ptr, authenticate_match, authenticate_match_len) == 0) ) {
                   authenticate_header = header_ptr;
                   Debug( 6, "Got authenticate header '%s'", header_ptr );
-                } else if ( !content_type_header && (strncasecmp( header_ptr, content_type_match, content_type_match_len) == 0) ) {
+                } else if ( !content_type_header && (strncasecmp(header_ptr, content_type_match, content_type_match_len) == 0) ) {
                   content_type_header = header_ptr+content_type_match_len;
-                  Debug( 6, "Got content type header '%s'", header_ptr );
+                  Debug(6, "Got content type header '%s'", header_ptr);
                 } else {
-                  Debug( 6, "Got ignored header '%s'", header_ptr );
+                  Debug(6, "Got ignored header '%s'", header_ptr);
                 }
                 header_ptr = crlf;
-                header_len -= buffer.consume( header_ptr-(char *)buffer );
+                header_len -= buffer.consume(header_ptr-(char *)buffer);
               } else {
                 // No end of line found
                 break;
@@ -727,119 +695,119 @@ int RemoteCameraHttp::GetResponse() {
               char *start_ptr, *end_ptr;
 
               if ( !http_header ) {
-                Error( "Unable to extract HTTP status from header" );
-                return( -1 );
+                Error("Unable to extract HTTP status from header");
+                return -1;
               }
 
               start_ptr = http_header;
-              end_ptr = start_ptr+strspn( start_ptr, "10." );
+              end_ptr = start_ptr+strspn(start_ptr, "10.");
 
               // FIXME Why are we memsetting every time?  Can we not do it once?
-              memset( http_version, 0, sizeof(http_version) );
-              strncpy( http_version, start_ptr, end_ptr-start_ptr );
+              memset(http_version, 0, sizeof(http_version));
+              strncpy(http_version, start_ptr, end_ptr-start_ptr);
 
               start_ptr = end_ptr;
-              start_ptr += strspn( start_ptr, " " );
-              end_ptr = start_ptr+strspn( start_ptr, "0123456789" );
+              start_ptr += strspn(start_ptr, " ");
+              end_ptr = start_ptr+strspn(start_ptr, "0123456789");
 
-              memset( status_code, 0, sizeof(status_code) );
-              strncpy( status_code, start_ptr, end_ptr-start_ptr );
-              int status = atoi( status_code );
+              memset(status_code, 0, sizeof(status_code));
+              strncpy(status_code, start_ptr, end_ptr-start_ptr);
+              int status = atoi(status_code);
 
               start_ptr = end_ptr;
-              start_ptr += strspn( start_ptr, " " );
-              strcpy( status_mesg, start_ptr );
+              start_ptr += strspn(start_ptr, " ");
+              strcpy(status_mesg, start_ptr);
 
               if ( status == 401 ) {
                 if ( mNeedAuth ) {
-                  Error( "Failed authentication: " );
-                  return( -1 );
+                  Error("Failed authentication");
+                  return -1;
                 }
-                if ( ! authenticate_header ) {
-                  Error( "Failed authentication, but don't have an authentication header: " );
-                  return( -1 );
+                if ( !authenticate_header ) {
+                  Error("Failed authentication, but don't have an authentication header.");
+                  return -1;
                 }
                 mNeedAuth = true;
                 std::string Header = authenticate_header;
-                Debug(2, "Checking for digest auth in %s", authenticate_header );
+                Debug(2, "Checking for digest auth in %s", authenticate_header);
 
                 mAuthenticator->checkAuthResponse(Header);
                 if ( mAuthenticator->auth_method() == zm::AUTH_DIGEST ) {
-                  Debug( 2, "Need Digest Authentication" );
-                  request = stringtf( "GET %s HTTP/%s\r\n", path.c_str(), config.http_version );
-                  request += stringtf( "User-Agent: %s/%s\r\n", config.http_ua, ZM_VERSION );
-                  request += stringtf( "Host: %s\r\n", host.c_str());
-                  if ( strcmp( config.http_version, "1.0" ) == 0 )
-                    request += stringtf( "Connection: Keep-Alive\r\n" );
-                  request += mAuthenticator->getAuthHeader( "GET", path.c_str() );
+                  Debug(2, "Need Digest Authentication");
+                  request = stringtf("GET %s HTTP/%s\r\n", path.c_str(), config.http_version);
+                  request += stringtf("User-Agent: %s/%s\r\n", config.http_ua, ZM_VERSION);
+                  request += stringtf("Host: %s\r\n", host.c_str());
+                  if ( strcmp(config.http_version, "1.0") == 0 )
+                    request += stringtf("Connection: Keep-Alive\r\n");
+                  request += mAuthenticator->getAuthHeader("GET", path.c_str());
                   request += "\r\n";
 
-                  Debug( 2, "New request header: %s", request.c_str() );
-                  return( 0 );
+                  Debug(2, "New request header: %s", request.c_str());
+                  return 0;
                 } else {
-                  Debug( 2, "Need some other kind of Authentication" );
+                  Debug(2, "Need some other kind of Authentication");
                 }
               } else if ( status < 200 || status > 299 ) {
-                Error( "Invalid response status %s: %s", status_code, status_mesg );
-                return( -1 );
+                Error("Invalid response status %s: %s", status_code, status_mesg);
+                return -1;
               }
-              Debug( 3, "Got status '%d' (%s), http version %s", status, status_mesg, http_version );
+              Debug(3, "Got status '%d' (%s), http version %s", status, status_mesg, http_version);
 
               if ( connection_header ) {
-                memset( connection_type, 0, sizeof(connection_type) );
-                start_ptr = connection_header + strspn( connection_header, " " );
+                memset(connection_type, 0, sizeof(connection_type));
+                start_ptr = connection_header + strspn(connection_header, " ");
                 // FIXME Should we not use strncpy?
-                strcpy( connection_type, start_ptr );
-                Debug( 3, "Got connection '%s'", connection_type );
+                strcpy(connection_type, start_ptr);
+                Debug(3, "Got connection '%s'", connection_type);
               }
               if ( content_length_header ) {
-                start_ptr = content_length_header + strspn( content_length_header, " " );
+                start_ptr = content_length_header + strspn(content_length_header, " ");
                 content_length = atoi( start_ptr );
-                Debug( 3, "Got content length '%d'", content_length );
+                Debug(3, "Got content length '%d'", content_length);
               }
               if ( content_type_header ) {
-                memset( content_type, 0, sizeof(content_type) );
-                start_ptr = content_type_header + strspn( content_type_header, " " );
-                if ( (end_ptr = strchr( start_ptr, ';' )) ) {
-                  strncpy( content_type, start_ptr, end_ptr-start_ptr );
-                  Debug( 3, "Got content type '%s'", content_type );
+                memset(content_type, 0, sizeof(content_type));
+                start_ptr = content_type_header + strspn(content_type_header, " ");
+                if ( (end_ptr = strchr(start_ptr, ';')) ) {
+                  strncpy(content_type, start_ptr, end_ptr-start_ptr);
+                  Debug(3, "Got content type '%s'", content_type);
 
-                  start_ptr = end_ptr + strspn( end_ptr, "; " );
+                  start_ptr = end_ptr + strspn(end_ptr, "; ");
 
-                  if ( strncasecmp( start_ptr, boundary_match, boundary_match_len ) == 0 ) {
+                  if ( strncasecmp(start_ptr, boundary_match, boundary_match_len) == 0 ) {
                     start_ptr += boundary_match_len;
-                    start_ptr += strspn( start_ptr, "-" );
-                    content_boundary_len = sprintf( content_boundary, "--%s", start_ptr );
-                    Debug( 3, "Got content boundary '%s'", content_boundary );
+                    start_ptr += strspn(start_ptr, "-");
+                    content_boundary_len = sprintf(content_boundary, "--%s", start_ptr);
+                    Debug(3, "Got content boundary '%s'", content_boundary);
                   } else {
-                    Error( "No content boundary found in header '%s'", content_type_header );
+                    Error("No content boundary found in header '%s'", content_type_header);
                   }
                 } else {
-                  strcpy( content_type, start_ptr );
-                  Debug( 3, "Got content type '%s'", content_type );
+                  strcpy(content_type, start_ptr);
+                  Debug(3, "Got content type '%s'", content_type);
                 }
               } // end if content_type_header
 
-              if ( !strcasecmp( content_type, "image/jpeg" ) || !strcasecmp( content_type, "image/jpg" ) ) {
+              if ( !strcasecmp(content_type, "image/jpeg") || !strcasecmp(content_type, "image/jpg") ) {
                 // Single image
                 mode = SINGLE_IMAGE;
                 format = JPEG;
                 state = CONTENT;
-              } else if ( !strcasecmp( content_type, "image/x-rgb" ) ) {
+              } else if ( !strcasecmp(content_type, "image/x-rgb") ) {
                 // Single image
                 mode = SINGLE_IMAGE;
                 format = X_RGB;
                 state = CONTENT;
-              } else if ( !strcasecmp( content_type, "image/x-rgbz" ) ) {
+              } else if ( !strcasecmp(content_type, "image/x-rgbz") ) {
                 // Single image
                 mode = SINGLE_IMAGE;
                 format = X_RGBZ;
                 state = CONTENT;
-              } else if ( !strcasecmp( content_type, "multipart/x-mixed-replace" ) ) {
+              } else if ( !strcasecmp(content_type, "multipart/x-mixed-replace") ) {
                 // Image stream, so start processing
                 if ( !content_boundary[0] ) {
-                  Error( "No content boundary found in header '%s'", content_type_header );
-                  return( -1 );
+                  Error("No content boundary found in header '%s'", content_type_header);
+                  return -1;
                 }
                 mode = MULTI_IMAGE;
                 state = SUBHEADER;
@@ -1060,14 +1028,15 @@ int RemoteCameraHttp::GetResponse() {
               }
             }
 
-            Debug( 3, "Returning %d bytes, buffer size: (%d) bytes of captured content", content_length, buffer.size() );
-            return( content_length );
-          } // end cast CONTENT
+            Debug(3, "Returning %d bytes, buffer size: (%d) bytes of captured content",
+                content_length, buffer.size());
+            return content_length;
+        } // end case CONTENT
       } // end switch
     }
   }
-  return( 0 );
-}
+  return 0;
+} // end RemoteCameraHttp::GetResponse
 
 int RemoteCameraHttp::PrimeCapture() {
   if ( sd < 0 ) {
@@ -1078,7 +1047,7 @@ int RemoteCameraHttp::PrimeCapture() {
     mode = SINGLE_IMAGE;
     buffer.clear();
   }
-  return 0;
+  return 1;
 }
 
 int RemoteCameraHttp::PreCapture() {
@@ -1097,10 +1066,10 @@ int RemoteCameraHttp::PreCapture() {
       return -1;
     }
   }
-  return 0;
-}
+  return 1;
+}  // end int RemoteCameraHttp::PreCapture()
 
-int RemoteCameraHttp::Capture( Image &image ) {
+int RemoteCameraHttp::Capture(ZMPacket &packet) {
   int content_length = GetResponse();
   if ( content_length == 0 ) {
     Warning( "Unable to capture image, retrying" );
@@ -1111,46 +1080,48 @@ int RemoteCameraHttp::Capture( Image &image ) {
     Disconnect();
     return -1;
   }
-  switch( format ) {
+
+  if ( !packet.image ) {
+    Debug(1, "Allocating image");
+    packet.image = new Image(width, height, colours, subpixelorder);
+  }
+  Image *image = packet.image;
+  packet.keyframe = 1;
+  packet.codec_type = AVMEDIA_TYPE_VIDEO;
+
+  switch ( format ) {
     case JPEG :
-      {
-        if ( !image.DecodeJpeg( buffer.extract( content_length ), content_length, colours, subpixelorder ) ) {
-          Error( "Unable to decode jpeg" );
-          Disconnect();
-          return -1;
-        }
-        break;
-      }
-    case X_RGB :
-      {
-        if ( content_length != (long)image.Size() ) {
-          Error( "Image length mismatch, expected %d bytes, content length was %d", image.Size(), content_length );
-          Disconnect();
-          return -1;
-        }
-        image.Assign( width, height, colours, subpixelorder, buffer, imagesize );
-        break;
-      }
-    case X_RGBZ :
-      {
-        if ( !image.Unzip( buffer.extract( content_length ), content_length ) ) {
-          Error( "Unable to unzip RGB image" );
-          Disconnect();
-          return -1;
-        }
-        image.Assign( width, height, colours, subpixelorder, buffer, imagesize );
-        break;
-      }
-    default :
-      {
-        Error( "Unexpected image format encountered" );
+      if ( !image->DecodeJpeg(buffer.extract(content_length), content_length, colours, subpixelorder) ) {
+        Error("Unable to decode jpeg");
         Disconnect();
         return -1;
       }
+      break;
+    case X_RGB :
+      if ( content_length != (long)image->Size() ) {
+        Error("Image length mismatch, expected %d bytes, content length was %d",
+            image->Size(), content_length);
+        Disconnect();
+        return -1;
+      }
+      image->Assign(width, height, colours, subpixelorder, buffer, imagesize);
+      break;
+    case X_RGBZ :
+      if ( !image->Unzip( buffer.extract( content_length ), content_length ) ) {
+        Error("Unable to unzip RGB image");
+        Disconnect();
+        return -1;
+      }
+      image->Assign(width, height, colours, subpixelorder, buffer, imagesize);
+      break;
+    default :
+      Error("Unexpected image format encountered");
+      Disconnect();
+      return -1;
   }
   return 1;
-}
+} // end ZmPacket *RmoteCameraHttp::Capture( &image );
 
 int RemoteCameraHttp::PostCapture() {
-  return 0;
+  return 1;
 }

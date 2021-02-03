@@ -6,6 +6,7 @@ var unarchiveBtn = $j('#unarchiveBtn');
 var editBtn = $j('#editBtn');
 var exportBtn = $j('#exportBtn');
 var downloadBtn = $j('#downloadBtn');
+var statsBtn = $j('#statsBtn');
 var deleteBtn = $j('#deleteBtn');
 var prevEventId = 0;
 var nextEventId = 0;
@@ -13,8 +14,6 @@ var prevEventStartTime = 0;
 var nextEventStartTime = 0;
 var PrevEventDefVideoPath = "";
 var NextEventDefVideoPath = "";
-var slider = null;
-var scroll = null;
 var currEventId = null;
 var CurEventDefVideoPath = null;
 var vid = null;
@@ -26,9 +25,8 @@ var streamCmdTimer = null;
 var streamStatus = null;
 var lastEventId = 0;
 var zmsBroke = false; //Use alternate navigation if zms has crashed
-var frameBatch = 40;
-var currFrameId = null;
 var auth_hash;
+var wasHidden = false;
 
 function streamReq(data) {
   if ( auth_hash ) data.auth = auth_hash;
@@ -83,7 +81,9 @@ function vjsReplay() {
 } // end function vjsReplay
 
 function initialAlarmCues(eventId) {
-  $j.getJSON(thisUrl + '?view=request&request=status&entity=frames&id=' + eventId, setAlarmCues) //get frames data for alarmCues and inserts into html
+  //get frames data for alarmCues and inserts into html
+  $j.getJSON(thisUrl + '?view=request&request=status&entity=frames&id=' + eventId)
+      .done(setAlarmCues)
       .fail(logAjaxFail);
 }
 
@@ -177,14 +177,10 @@ function changeScale() {
   var newWidth;
   var newHeight;
   var autoScale;
-  var eventViewer;
+  var eventViewer= $j(vid ? '#videoobj' : '#evtStream');
   var alarmCue = $j('div.alarmCue');
-  var bottomEl = streamMode == 'stills' ? $j('#eventImageNav') : $j('#replayStatus');
-  if ( streamMode == 'stills' ) {
-    eventViewer = $j('#eventThumbs');
-  } else {
-    eventViewer = $j(vid ? '#videoobj' : '#evtStream');
-  }
+  var bottomEl = $j('#replayStatus');
+
   if ( scale == '0' || scale == 'auto' ) {
     var newSize = scaleToFit(eventData.Width, eventData.Height, eventViewer, bottomEl);
     newWidth = newSize.width;
@@ -195,21 +191,17 @@ function changeScale() {
     newWidth = eventData.Width * scale / SCALE_BASE;
     newHeight = eventData.Height * scale / SCALE_BASE;
   }
-  if ( streamMode != 'stills' ) {
-    eventViewer.width(newWidth);
-  } // stills handles its own width
+  eventViewer.width(newWidth);
   eventViewer.height(newHeight);
   if ( !vid ) { // zms needs extra sizing
     streamScale(scale == '0' ? autoScale : scale);
     drawProgressBar();
   }
-  if ( streamMode == 'stills' ) {
-    slider.autosize();
-    alarmCue.html(renderAlarmCues($j('#thumbsSliderPanel')));
-  } else {
-    alarmCue.html(renderAlarmCues(eventViewer));//just re-render alarmCues.  skip ajax call
-  }
+  alarmCue.html(renderAlarmCues(eventViewer));//just re-render alarmCues.  skip ajax call
   setCookie('zmEventScale'+eventData.MonitorId, scale, 3600);
+
+  // After a resize, check if we still have room to display the event stats table
+  onStatsResize(newWidth);
 } // end function changeScale
 
 function changeReplayMode() {
@@ -312,7 +304,7 @@ function getCmdResponse( respObj, respText ) {
     }
   } // end if haev a new auth hash
 
-  streamCmdTimer = streamQuery.delay(streamTimeout); //Timeout is refresh rate for progressBox and time display
+  streamCmdTimer = setTimeout(streamQuery, streamTimeout); //Timeout is refresh rate for progressBox and time display
 } // end function getCmdResponse( respObj, respText )
 
 function pauseClicked() {
@@ -481,7 +473,7 @@ function streamNext(action) {
     //
     location.replace(thisUrl + '?view=event&eid=' + nextEventId + filterQuery + sortQuery);
     return;
-    if ( vid && ( NextEventDefVideoPath.indexOf("view_video") > 0 ) ) { //on and staying with videojs
+    if ( vid && ( NextEventDefVideoPath.indexOf('view_video') > 0 ) ) { //on and staying with videojs
       CurEventDefVideoPath = NextEventDefVideoPath;
       eventQuery(nextEventId);
     } else if ( zmsBroke || (vid && NextEventDefVideoPath.indexOf("view_video") < 0) || NextEventDefVideoPath.indexOf("view_video") > 0) {//reload zms, leaving vjs, moving to vjs
@@ -577,11 +569,6 @@ function getEventResponse(respObj, respText) {
   }
 
   eventData = respObj.event;
-  var eventStills = $j('#eventStills');
-
-  if ( eventStills && !eventStills.hasClass('hidden') && currEventId != eventData.Id ) {
-    resetEventStills();
-  }
   currEventId = eventData.Id;
 
   $j('#dataEventId').text( eventData.Id );
@@ -646,128 +633,14 @@ function getNearEventsResponse( respObj, respText ) {
   PrevEventDefVideoPath = respObj.nearevents.PrevEventDefVideoPath;
   NextEventDefVideoPath = respObj.nearevents.NextEventDefVideoPath;
 
-  $j('#prevEventBtn').prop('disabled', !prevEventId);
-  $j('#nextEventBtn').prop('disabled', !nextEventId);
   $j('#prevBtn').prop('disabled', prevEventId == 0 ? true : false).attr('class', prevEventId == 0 ? 'unavail' : 'inactive');
   $j('#nextBtn').prop('disabled', nextEventId == 0 ? true : false).attr('class', nextEventId == 0 ? 'unavail' : 'inactive');
 }
 
-var nearEventsReq = new Request.JSON( {url: thisUrl, method: 'get', timeout: AJAX_TIMEOUT, link: 'cancel', onSuccess: getNearEventsResponse} );
-
 function nearEventsQuery( eventId ) {
-  var parms = "view=request&request=status&entity=nearevents&id="+eventId+filterQuery+sortQuery;
-  nearEventsReq.send( parms );
-}
-
-function loadEventThumb( event, frame, loadImage ) {
-  var thumbImg = $j('#eventThumb'+frame.FrameId);
-  if ( !thumbImg ) {
-    console.error('No holder found for frame '+frame.FrameId);
-    return;
-  }
-  var img = new Asset.image( imagePrefix+frame.EventId+"&fid="+frame.FrameId,
-      {
-        'onload': ( function( loadImage ) {
-          thumbImg.prop('src', img.prop('src'));
-          thumbImg.prop('class', frame.Type=='Alarm'?'alarm':'normal');
-          thumbImg.prop('title', frame.FrameId+' / '+((frame.Type=='Alarm')?frame.Score:0));
-          thumbImg.removeClass('placeholder');
-          thumbImg.off('click');
-          thumbImg.click(function() {
-            locateImage( frame.FrameId, true );
-          } );
-          if ( loadImage ) {
-            loadEventImage( event, frame );
-          }
-        } ).pass( loadImage )
-      }
-  );
-}
-
-function loadEventImage(event, frame) {
-  console.debug('Loading '+event.Id+'/'+frame.FrameId);
-  var eventImg = $j('#eventImage');
-  var thumbImg = $j('#eventThumb'+frame.FrameId);
-  if ( eventImg.prop('src') != thumbImg.prop('src') ) {
-    var eventImagePanel = $j('#eventImagePanel');
-
-    if ( eventImagePanel.css('display') != 'none' ) {
-      var lastThumbImg = $j('#eventThumb' + eventImg.prop('alt'));
-      lastThumbImg.removeClass('selected');
-      lastThumbImg.css('opacity', '1.0');
-    }
-
-    $j('#eventImageBar').css('width', event.Width);
-    if ( frame.Type == 'Alarm' ) {
-      $j('#eventImageStats').removeClass('hidden');
-    } else {
-      $j('#eventImageStats').addClass('hidden');
-    }
-    thumbImg.addClass('selected');
-    thumbImg.css('opacity', '0.5');
-
-    if ( eventImagePanel.css('display') == 'none' ) {
-      eventImagePanel.css('opacity', '0');
-      eventImagePanel.css('display', 'inline-block');
-      new Fx.Tween( eventImagePanel, {duration: 500, transition: Fx.Transitions.Sine} ).start( 'opacity', 0, 1 );
-    }
-
-    eventImg.prop( {
-      'class': frame.Type=='Alarm'?'alarm':'normal',
-      'src': thumbImg.prop('src'),
-      'title': thumbImg.prop('title'),
-      'alt': thumbImg.prop('alt'),
-      'height': $j('#eventThumbs').height() - $j('#eventImageBar').outerHeight(true)-10
-    } );
-
-    $j('#eventImageNo').text(frame.FrameId);
-    $j('#prevImageBtn').prop('disabled', !frame.FrameId == 1);
-    $j('#nextImageBtn').prop('disabled', !frame.FrameId == event.Frames);
-  }
-}
-
-function hideEventImageComplete() {
-  var thumbImg = $j('#eventThumb'+$j('#eventImage').prop('alt'));
-  if ( thumbImg ) {
-    thumbImg.removeClass('selected');
-    thumbImg.css('opacity', '1.0');
-  } else {
-    console.log('Unable to find eventThumb at eventThumb'+$j('#eventImage').prop('alt'));
-  }
-  $j('#prevImageBtn').prop('disabled', true);
-  $j('#nextImageBtn').prop('disabled', true);
-  $j('#eventImagePanel').css('display', 'none');
-  $j('#eventImageStats').addClass('hidden');
-}
-
-function hideEventImage() {
-  if ( $j('#eventImagePanel').css('display') != 'none' ) {
-    new Fx.Tween( $j('#eventImagePanel'), {duration: 500, transition: Fx.Transitions.Sine, onComplete: hideEventImageComplete} ).start('opacity', 1, 0);
-  }
-}
-
-function resetEventStills() {
-  hideEventImage();
-  $j('#eventThumbs').empty();
-  if ( true || !slider ) {
-    slider = new Slider( '#thumbsSlider', '#thumbsKnob', {
-      /*steps: eventData.Frames,*/
-      value: 0,
-      onChange: function( step ) {
-        if ( !step ) {
-          step = 0;
-        }
-        var fid = parseInt((step * eventData.Frames)/this.options.steps);
-        if ( fid < 1 ) {
-          fid = 1;
-        } else if ( fid > eventData.Frames ) {
-          fid = eventData.Frames;
-        }
-        checkFrames( eventData.Id, fid, ($j('#eventImagePanel').css('display')=='none'?'':'true'));
-        scroll.toElement( 'eventThumb'+fid );
-      }
-    } );
-  }
+  $j.getJSON(thisUrl + '?view=request&request=status&entity=nearevents&id='+eventId+filterQuery+sortQuery)
+      .done(getNearEventsResponse)
+      .fail(logAjaxFail);
 }
 
 function getFrameResponse(respObj, respText) {
@@ -787,8 +660,6 @@ function getFrameResponse(respObj, respText) {
   }
 
   eventData['frames'][frame.FrameId] = frame;
-
-  loadEventThumb(eventData, frame, respObj.loopback=="true");
 }
 
 function frameQuery( eventId, frameId, loadImage ) {
@@ -799,108 +670,6 @@ function frameQuery( eventId, frameId, loadImage ) {
   $j.getJSON(thisUrl + '?view=request&request=status&entity=frameimage', data)
       .done(getFrameResponse)
       .fail(logAjaxFail);
-}
-
-function checkFrames( eventId, frameId, loadImage ) {
-  if ( !eventData ) {
-    console.error("No event "+eventId+" found");
-    return;
-  }
-
-  if ( !eventData['frames'] ) {
-    eventData['frames'] = {};
-  }
-
-  currFrameId = frameId;
-
-  var loFid = frameId - frameBatch/2;
-  if ( loFid < 1 ) {
-    loFid = 1;
-  }
-  var hiFid = loFid + (frameBatch-1);
-  if ( hiFid > eventData.Frames ) {
-    hiFid = eventData.Frames;
-  }
-
-  for ( var fid = loFid; fid <= hiFid; fid++ ) {
-    if ( !$j('#eventThumb'+fid) ) {
-      var img = $j('<img>');
-      img.attr({
-        'id': 'eventThumb'+fid,
-        'src': 'graphics/transparent.png',
-        'alt': fid,
-        'class': 'placeholder'
-      });
-
-      img.click(function() {
-        eventData['frames'][fid] = null;
-        checkFrames(eventId, fid);
-      });
-      frameQuery(eventId, fid, loadImage && (fid == frameId));
-      var imgs = $j('#eventThumbs img');
-      var injected = false;
-      if ( fid < imgs.length ) {
-        imgs.before(img);
-        injected = true;
-      } else {
-        injected = imgs.toArray().some(
-            function( thumbImg, index ) {
-              if ( parseInt(img.prop('alt')) < parseInt(thumbImg.prop('alt')) ) {
-                thumbImg.before(img);
-                return true;
-              }
-              return false;
-            }
-        );
-      }
-      if ( !injected ) {
-        $j('#eventThumbs').append(img);
-      }
-      var scale = parseInt(img.css('height'));
-      img.css( {
-        'width': parseInt((eventData.Width*scale)/100),
-        'height': parseInt((eventData.Height*scale)/100)
-      } );
-    } else if ( eventData['frames'][fid] ) {
-      if ( loadImage && (fid == frameId) ) {
-        loadEventImage( eventData, eventData['frames'][fid], loadImage );
-      }
-    }
-  }
-  $j('#prevThumbsBtn').prop('disabled', frameId == 1);
-  $j('#nextThumbsBtn').prop('disabled', frameId == eventData.Frames);
-}
-
-function locateImage( frameId, loadImage ) {
-  if ( slider ) {
-    slider.fireEvent( 'tick', slider.toPosition( parseInt((frameId-1)*slider.options.steps/eventData.Frames) ));
-  }
-  checkFrames( eventData.Id, frameId, loadImage );
-  scroll.toElement( 'eventThumb'+frameId );
-}
-
-function prevImage() {
-  if ( currFrameId > 1 ) {
-    locateImage( parseInt(currFrameId)-1, true );
-  }
-}
-
-function nextImage() {
-  if ( currFrameId < eventData.Frames ) {
-    locateImage( parseInt(currFrameId)+1, true );
-  }
-}
-
-function prevThumbs() {
-  if ( currFrameId > 1 ) {
-    locateImage( parseInt(currFrameId)>10?(parseInt(currFrameId)-10):1, $j('#eventImagePanel').css('display')!="none" );
-  }
-}
-
-function nextThumbs() {
-  if ( currFrameId < eventData.Frames ) {
-    locateImage( parseInt(currFrameId)<(eventData.Frames-10)?(parseInt(currFrameId)+10):eventData.Frames, $j('#eventImagePanel').css('display')!="none" );
-  }
 }
 
 function prevEvent() {
@@ -952,54 +721,6 @@ function exportEvent() {
 
 function showEventFrames() {
   window.location.assign('?view=frames&eid='+eventData.Id);
-}
-
-function showStream() {
-  $j('#eventStills').addClass('hidden');
-  $j('#eventVideo').removeClass('hidden');
-
-  $j('#stillsEvent').removeClass('hidden');
-  $j('#streamEvent').addClass('hidden');
-
-  streamMode = 'video';
-  if (scale == 'auto') changeScale();
-}
-
-function showStills() {
-  $j('#eventStills').removeClass('hidden');
-  $j('#eventVideo').addClass('hidden');
-
-  if (vid && ( vid.paused != true ) ) {
-    // Pause the video
-    vid.pause();
-
-    // Update the button text to 'Play'
-    //if ( playButton )
-    //playButton.innerHTML = "Play";
-  }
-
-  $j('#stillsEvent').addClass('hidden');
-  $j('#streamEvent').removeClass('hidden');
-
-  streamMode = 'stills';
-
-  pauseClicked();
-  if ( !scroll ) {
-    scroll = new Fx.Scroll('eventThumbs', {
-      wait: false,
-      duration: 500,
-      offset: {'x': 0, 'y': 0},
-      transition: Fx.Transitions.Quad.easeInOut
-    }
-    );
-  }
-  resetEventStills();
-  if (scale == 'auto') changeScale();
-}
-
-function showFrameStats() {
-  var fid = $j('#eventImageNo').text();
-  window.location.assign('?view=stats&eid='+eventData.Id+'&fid='+fid);
 }
 
 function videoEvent() {
@@ -1054,15 +775,15 @@ function handleClick( event ) {
 // Manage the DELETE CONFIRMATION modal button
 function manageDelConfirmModalBtns() {
   document.getElementById("delConfirmBtn").addEventListener("click", function onDelConfirmClick(evt) {
-    if ( ! canEdit.Events ) {
+    if ( !canEdit.Events ) {
       enoperm();
       return;
     }
 
     evt.preventDefault();
     $j.getJSON(thisUrl + '?request=events&task=delete&eids[]='+eventData.Id)
-        .done( function(data) {
-          streamNext( true );
+        .done(function(data) {
+          streamNext(true);
         })
         .fail(logAjaxFail);
   });
@@ -1086,11 +807,11 @@ function getEvtStatsCookie() {
 
 function getStat() {
   table.empty().append('<tbody>');
-  $j.each( eventDataStrings, function( key ) {
+  $j.each(eventDataStrings, function(key) {
     var th = $j('<th>').addClass('text-right').text(eventDataStrings[key]);
     var tdString;
 
-    switch (eventData[key].length ? key : 'n/a') {
+    switch ( ( eventData[key] && eventData[key].length ) ? key : 'n/a') {
       case 'Frames':
         tdString = '<a href="?view=frames&amp;eid=' + eventData.Id + '">' + eventData[key] + '</a>';
         break;
@@ -1114,12 +835,43 @@ function getStat() {
   });
 }
 
+function onStatsResize(vidwidth) {
+  var minWidth = 300; // An arbitrary value in pixels used to hide the stats table
+  var scale = $j('#scale').val();
+
+  if ( parseInt(scale) ) {
+    vidWidth = vidWidth * (scale/100);
+  }
+
+  var width = $j(window).width() - vidwidth;
+  //console.log("Width: " + width + " = window.width " + $j(window).width() + "- vidWidth" + vidwidth);
+
+  // Hide the stats table if we have run out of room to show it properly
+  if ( width < minWidth ) {
+    statsBtn.prop('disabled', true);
+    if ( table.is(':visible') ) {
+      table.toggle(false);
+      wasHidden = true;
+    }
+  // Show the stats table if we hid it previously and sufficient room becomes available
+  } else if ( width >= minWidth ) {
+    statsBtn.prop('disabled', false);
+    if ( !table.is(':visible') && wasHidden ) {
+      table.toggle(true);
+      wasHidden = false;
+    }
+  }
+}
+
 function initPage() {
   // Load the event stats
   getStat();
 
-  var stats = getEvtStatsCookie();
-  if ( stats != 'on' ) table.toggle(false);
+  if ( getEvtStatsCookie() != 'on' ) {
+    table.toggle(false);
+  } else {
+    onStatsResize(eventData.Width);
+  }
 
   //FIXME prevent blocking...not sure what is happening or best way to unblock
   if ( $j('#videoobj').length ) {
@@ -1149,7 +901,7 @@ function initPage() {
     }
   } else {
     progressBarNav();
-    streamCmdTimer = streamQuery.delay(250);
+    streamCmdTimer = setTimeout(streamQuery, 500);
     if ( canStreamNative ) {
       if ( !$j('#imageFeed') ) {
         console.log('No element with id tag imageFeed found.');
@@ -1184,19 +936,19 @@ function initPage() {
   backBtn.prop('disabled', !document.referrer.length);
 
   // Manage the BACK button
-  document.getElementById("backBtn").addEventListener("click", function onBackClick(evt) {
+  bindButton('#backBtn', 'click', null, function onBackClick(evt) {
     evt.preventDefault();
     window.history.back();
   });
 
   // Manage the REFRESH Button
-  document.getElementById("refreshBtn").addEventListener("click", function onRefreshClick(evt) {
+  bindButton('#refreshBtn', 'click', null, function onRefreshClick(evt) {
     evt.preventDefault();
     window.location.reload(true);
   });
 
   // Manage the Event RENAME button
-  document.getElementById("renameBtn").addEventListener("click", function onRenameClick(evt) {
+  bindButton('#renameBtn', 'click', null, function onRenameClick(evt) {
     evt.preventDefault();
     $j.getJSON(thisUrl + '?request=modal&modal=eventrename&eid='+eventData.Id)
         .done(function(data) {
@@ -1209,7 +961,7 @@ function initPage() {
   });
 
   // Manage the ARCHIVE button
-  document.getElementById("archiveBtn").addEventListener("click", function onArchiveClick(evt) {
+  bindButton('#archiveBtn', 'click', null, function onArchiveClick(evt) {
     evt.preventDefault();
     $j.getJSON(thisUrl + '?request=events&task=archive&eids[]='+eventData.Id)
         .done( function(data) {
@@ -1220,7 +972,7 @@ function initPage() {
   });
 
   // Manage the UNARCHIVE button
-  document.getElementById("unarchiveBtn").addEventListener("click", function onUnarchiveClick(evt) {
+  bindButton('#unarchiveBtn', 'click', null, function onUnarchiveClick(evt) {
     if ( ! canEdit.Events ) {
       enoperm();
       return;
@@ -1235,7 +987,7 @@ function initPage() {
   });
 
   // Manage the EDIT button
-  document.getElementById("editBtn").addEventListener("click", function onEditClick(evt) {
+  bindButton('#editBtn', 'click', null, function onEditClick(evt) {
     if ( ! canEdit.Events ) {
       enoperm();
       return;
@@ -1256,13 +1008,13 @@ function initPage() {
   });
 
   // Manage the EXPORT button
-  document.getElementById("exportBtn").addEventListener("click", function onExportClick(evt) {
+  bindButton('#exportBtn', 'click', null, function onExportClick(evt) {
     evt.preventDefault();
     window.location.assign('?view=export&eids[]='+eventData.Id);
   });
 
   // Manage the DOWNLOAD VIDEO button
-  document.getElementById("downloadBtn").addEventListener("click", function onDownloadClick(evt) {
+  bindButton('#downloadBtn', 'click', null, function onDownloadClick(evt) {
     evt.preventDefault();
     $j.getJSON(thisUrl + '?request=modal&modal=download&eids[]='+eventData.Id)
         .done(function(data) {
@@ -1275,7 +1027,7 @@ function initPage() {
   });
 
   // Manage the Event STATISTICS Button
-  document.getElementById("statsBtn").addEventListener("click", function onStatsClick(evt) {
+  bindButton('#statsBtn', 'click', null, function onStatsClick(evt) {
     evt.preventDefault();
     var cookie = 'zmEventStats';
 
@@ -1290,14 +1042,14 @@ function initPage() {
   });
 
   // Manage the FRAMES Button
-  document.getElementById("framesBtn").addEventListener("click", function onFramesClick(evt) {
+  bindButton('#framesBtn', 'click', null, function onFramesClick(evt) {
     evt.preventDefault();
     window.location.assign('?view=frames&eid='+eventData.Id);
   });
 
   // Manage the DELETE button
-  document.getElementById("deleteBtn").addEventListener("click", function onDeleteClick(evt) {
-    if ( ! canEdit.Events ) {
+  bindButton('#deleteBtn', 'click', null, function onDeleteClick(evt) {
+    if ( !canEdit.Events ) {
       enoperm();
       return;
     }
@@ -1316,7 +1068,7 @@ function initPage() {
     }
     $j('#deleteConfirm').modal('show');
   });
-}
+} // end initPage
 
 // Kick everything off
 $j(document).ready(initPage);

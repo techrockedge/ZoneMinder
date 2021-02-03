@@ -35,17 +35,25 @@ Camera::Camera(
     bool p_record_audio
     ) :
     monitor_id(p_monitor_id),
+    monitor(nullptr),
     type(p_type),
     width(p_width),
     height(p_height),
     colours(p_colours),
-    subpixelorder(p_subpixelorder),
+    subpixelorder(p_subpixelorder),    
     brightness(p_brightness),
     hue(p_hue),
     colour(p_colour),
     contrast(p_contrast),
     capture(p_capture),
     record_audio(p_record_audio),
+    mVideoStreamId(-1),
+    mAudioStreamId(-1),
+    mVideoCodecContext(nullptr),
+    mAudioCodecContext(nullptr),
+    mVideoStream(nullptr),
+    mAudioStream(nullptr),
+    mFormatContext(nullptr),
     bytes(0)
 {
   linesize = width * colours;
@@ -54,11 +62,15 @@ Camera::Camera(
 
   Debug(2, "New camera id: %d width: %d line size: %d height: %d colours: %d subpixelorder: %d capture: %d",
       monitor_id, width, linesize, height, colours, subpixelorder, capture);
-
-  monitor = nullptr;
 }
 
 Camera::~Camera() {
+  if ( mFormatContext ) {
+    // Should also free streams
+    avformat_free_context(mFormatContext);
+    mVideoStream = nullptr;
+    mAudioStream = nullptr;
+  }
 }
 
 Monitor *Camera::getMonitor() {
@@ -70,4 +82,33 @@ Monitor *Camera::getMonitor() {
 void Camera::setMonitor(Monitor *p_monitor) {
   monitor = p_monitor;
   monitor_id = monitor->Id();
+}
+
+AVStream *Camera::get_VideoStream() {
+  if ( !mVideoStream ) {
+    if ( !mFormatContext )
+      mFormatContext = avformat_alloc_context();
+    Debug(1, "Allocating avstream");
+    mVideoStream = avformat_new_stream(mFormatContext, nullptr);
+    if ( mVideoStream ) {
+      mVideoStream->time_base = (AVRational){1, 1000000}; // microseconds as base frame rate
+#if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
+      mVideoStream->codecpar->width = width;
+      mVideoStream->codecpar->height = height;
+      mVideoStream->codecpar->format = GetFFMPEGPixelFormat(colours, subpixelorder);
+      mVideoStream->codecpar->codec_type = AVMEDIA_TYPE_VIDEO;
+      mVideoStream->codecpar->codec_id = AV_CODEC_ID_NONE;
+    Debug(1, "Allocating avstream %p %p %d", mVideoStream, mVideoStream->codecpar, mVideoStream->codecpar->codec_id);
+#else
+      mVideoStream->codec->width = width;
+      mVideoStream->codec->height = height;
+      mVideoStream->codec->pix_fmt = GetFFMPEGPixelFormat(colours, subpixelorder);
+      mVideoStream->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+      mVideoStream->codec->codec_id = AV_CODEC_ID_NONE;
+#endif
+    } else {
+      Error("Can't create video stream");
+    }
+  }
+  return mVideoStream;
 }

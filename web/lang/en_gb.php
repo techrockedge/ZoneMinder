@@ -168,13 +168,14 @@ $SLANG = array(
     'BadMotionFrameSkip'    => 'Motion Frame skip count must be an integer of zero or more',
     'BadHeight'             => 'Height must be set to a valid value',
     'BadHost'               => 'Host must be set to a valid ip address or hostname, do not include http://',
-    'BadImageBufferCount'   => 'Image buffer size must be an integer of 10 or more',
+    'BadImageBufferCount'   => 'Image buffer size must be an integer of 2 or more',
     'BadLabelX'             => 'Label X co-ordinate must be set to an integer of zero or more',
     'BadLabelY'             => 'Label Y co-ordinate must be set to an integer of zero or more',
     'BadMaxFPS'             => 'Maximum FPS must be a positive integer or floating point value',
     'BadNameChars'          => 'Names may only contain alphanumeric characters plus spaces, hyphen and underscore',
     'BadPalette'            => 'Palette must be set to a valid value',
     'BadColours'            => 'Target colour must be set to a valid value',
+    'BadPassthrough'        => 'Passthrough only works with ffmpeg type monitors.',
     'BadPath'               => 'Path must be set to a valid value',
     'BadPort'               => 'Port must be set to a valid number',
     'BadPostEventCount'     => 'Post event image count must be an integer of zero or more',
@@ -996,9 +997,8 @@ $OLANG = array(
     'Help' => '
       Parameters in this field are passed on to FFmpeg. Multiple parameters can be separated by ,~~
       Examples (do not enter quotes)~~~~
-      "allowed_media_types=video" Set datatype to request fromcam (audio, video, data)~~~~
-      "reorder_queue_size=nnn" Set number of packets to buffer for handling of reordered packets~~~~
-      "loglevel=debug" Set verbosity of FFmpeg (quiet, panic, fatal, error, warning, info, verbose, debug)
+      "allowed_media_types=video" Set datatype to request from cam (audio, video, data)~~~~
+      "reorder_queue_size=nnn" Set number of packets to buffer for handling of reordered packets
     '
 	),
   'OPTIONS_ENCODER_PARAMETERS' => array(
@@ -1089,7 +1089,7 @@ $OLANG = array(
     'Help' => '
       In Modect mode the capture process (zmc) will connect to the camera and stream data.
       It will be decoded if necessary and live viewing will be possible.
-      In addition a process (zma) will analyse the video for motion.  
+      In addition the video will be analysed for motion.  
       When motion is detected, events will be created and video will be stored.
       Motion data will be stored in the database for each event.
       Events may also be triggered externally (zmtrigger) or by linked monitors.
@@ -1099,7 +1099,7 @@ $OLANG = array(
     'Help' => '
       In Record mode the capture process (zmc) will connect to the camera and stream data.
       It will be decoded if necessary and live viewing will be possible.
-      In addition a process (zma) will run but will not perform motion detection.
+      Motion detection will not be performed.
       Events will be created at fixed intervals and video will be stored.
       '
   ),
@@ -1107,7 +1107,7 @@ $OLANG = array(
     'Help' => '
       In Mocord mode the capture process (zmc) will connect to the camera and stream data.
       It will be decoded if necessary and live viewing will be possible.
-      In addition a process (zma) will analyse the video for motion.
+      In addition the video will be analysed for motion.  
       Events will be created at fixed intervals or at start and stop of motion.
       Video will always be stored to disk and events will have the motion data stored in the database.
       Events may also be triggered externally (zmtrigger) or by linked monitors.
@@ -1117,7 +1117,7 @@ $OLANG = array(
     'Help' => '
       In Nodect mode the capture process (zmc) will connect to the camera and stream data.
       It will be decoded if necessary and live viewing will be possible.
-      In addition a process (zma) will run and will check any linked cameras for their alarm status. 
+      In addition any linked cameras will be checked for their alarm status. 
       When linked cameras or an external trigger (zmtrigger) are alarmed, events will be created
       and video will be stored.  No other motion detection will occur.
       '
@@ -1128,7 +1128,7 @@ $OLANG = array(
       This setting sets the default state when the process starts up.
       It can then be turned on/off through external triggers zmtrigger zmu or the web ui.
       When not enabled no motion detection or linked monitor checking will be performed and 
-      no events will be created. The zma process will still be running waiting to be enabled.
+      no events will be created.
       '
   ),
   'FUNCTION_DECODING_ENABLED' => array(

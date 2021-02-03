@@ -87,7 +87,6 @@ Options for use with monitors:
 */
 
 #include <getopt.h>
-#include <cinttypes>
 
 #include "zm.h"
 #include "zm_db.h"
@@ -548,10 +547,11 @@ int main(int argc, char *argv[]) {
     }
     if ( function & ZMU_FPS ) {
       if ( verbose ) {
-        printf("Current capture rate: %.2f frames per second\n", monitor->GetFPS());
+        printf("Current capture rate: %.2f frames per second, analysis rate: %.2f frames per second\n",
+            monitor->get_capture_fps(), monitor->get_analysis_fps());
       } else {
         if ( have_output ) fputc(separator, stdout);
-        printf("%.2f", monitor->GetFPS());
+        printf("capture: %.2f, analysis: %.2f", monitor->get_capture_fps(), monitor->get_analysis_fps());
         have_output = true;
       }
     }
@@ -585,11 +585,17 @@ int main(int argc, char *argv[]) {
               );
         }
         monitor->ForceAlarmOn(config.forced_alarm_score, "Forced Web");
-        while ( ((state = monitor->GetState()) != Monitor::ALARM) && !zm_terminate ) {
+        int wait = 10*1000*1000; // 10 seconds
+        while ( ((state = monitor->GetState()) != Monitor::ALARM) and !zm_terminate and wait) {
           // Wait for monitor to notice.
           usleep(1000);
+          wait -= 1000;
         }
-        printf("Alarmed event id: %" PRIu64 "\n", monitor->GetLastEventId());
+        if ( (state = monitor->GetState()) != Monitor::ALARM and !wait ) {
+          Error("Monitor failed to respond to forced alarm.");
+        } else {
+          printf("Alarmed event id: %" PRIu64 "\n", monitor->GetLastEventId());
+        }
       }
     }  // end if ZMU_ALARM
 

@@ -247,22 +247,6 @@ if ( currentView != 'none' && currentView != 'login' ) {
     if ( $j('.navbar').length ) {
       setInterval(getNavBar, navBarRefresh);
     }
-    // Workaround Bootstrap-Mootools conflict
-    var bootstrapLoaded = (typeof $j().carousel == 'function');
-    var mootoolsLoaded = (typeof MooTools != 'undefined');
-    if (bootstrapLoaded && mootoolsLoaded) {
-      Element.implement({
-        hide: function() {
-          return this;
-        },
-        show: function(v) {
-          return this;
-        },
-        slide: function(v) {
-          return this;
-        }
-      });
-    }
     // Update zmBandwidth cookie when the user makes a selection from the dropdown
     bwClickFunction();
     // Update update reminders when the user makes a selection from the dropdown
@@ -813,6 +797,16 @@ function manageModalBtns(id) {
   });
 }
 
+function bindButton(selector, action, data, func) {
+  var elements = $j(selector);
+  if ( !elements.length ) {
+    console.log("Nothing found for " + selector);
+    return;
+  }
+  elements.on(action, data, func);
+}
+
+
 function human_filesize(size, precision = 2) {
   var units = Array('B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB');
   var step = 1024;
@@ -842,7 +836,7 @@ function exportResponse(data, responseText) {
     $j('#downloadLink').attr("href", thisUrl + exportFile);
     $j('#exportProgress').addClass( 'text-success' );
     $j('#exportProgress').text(exportSucceededString);
-    startDownload.pass( exportFile ).delay( 1500 );
+    setTimeout(startDownload, 1500, exportFile);
   } else {
     $j('#exportProgress').addClass( 'text-danger' );
     $j('#exportProgress').text(exportFailedString);
@@ -897,7 +891,7 @@ function thumbnail_onmouseover(event) {
     var imgAttr = ( currentView == 'frames' ) ? 'full_img_src' : 'stream_src';
     img.src = '';
     img.src = img.getAttribute(imgAttr);
-    img.addClass(imgClass);
+    img.classList.add(imgClass);
   }, 350);
 }
 
@@ -908,7 +902,7 @@ function thumbnail_onmouseout(event) {
   var imgAttr = ( currentView == 'frames' ) ? 'img_src' : 'still_src';
   img.src = '';
   img.src = img.getAttribute(imgAttr);
-  img.removeClass(imgClass);
+  img.classList.remove(imgClass);
 }
 
 function initThumbAnimation() {

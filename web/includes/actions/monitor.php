@@ -28,22 +28,22 @@ if ( $action == 'save' ) {
   $mid = 0;
   if ( !empty($_REQUEST['mid']) ) {
     $mid = validInt($_REQUEST['mid']);
+    if ( !canEdit('Monitors', $mid) ) {
+      ZM\Warning('You do not have permission to edit this monitor');
+      return;
+    }
     if ( ZM_OPT_X10 ) {
       $x10Monitor = dbFetchOne('SELECT * FROM TriggersX10 WHERE MonitorId=?', NULL, array($mid));
       if ( !$x10Monitor )
         $x10Monitor = array();
     }
-    if ( !canEdit('Monitors', $mid) ) {
-      ZM\Warning('You do not have permission to edit this monitor');
-      return;
-    }
   } else {
-    if ( ZM_OPT_X10 ) {
-      $x10Monitor = array();
-    }
     if ( $user['MonitorIds'] ) {
       ZM\Warning('You are restricted to certain monitors so cannot add a new one.');
       return;
+    }
+    if ( ZM_OPT_X10 ) {
+      $x10Monitor = array();
     }
   }
 
@@ -91,7 +91,6 @@ if ( $action == 'save' ) {
 
       # If we change anything that changes the shared mem size, zma can complain.  So let's stop first.
       if ( $monitor->Type() != 'WebSite' ) {
-        $monitor->zmaControl('stop');
         $monitor->zmcControl('stop');
         if ( $monitor->Controllable() ) {
           $monitor->sendControlCommand('stop');
@@ -202,6 +201,9 @@ if ( $action == 'save' ) {
             } // end foreach zone
           } // end if rotation or just size change
         } // end if changes in width or height
+      } else {
+        global $error_message;
+        $error_message = dbError();
       } // end if successful save
       $restart = true;
     } else { // new monitor
@@ -209,8 +211,11 @@ if ( $action == 'save' ) {
 # FIXME This is actually a race condition. Should lock the table.
       $maxSeq = dbFetchOne('SELECT MAX(Sequence) AS MaxSequence FROM Monitors', 'MaxSequence');
       $changes['Sequence'] = $maxSeq+1;
+      if ( $mid and !$monitor->Id() ) {
+        $changes['Id'] = $mid;
+      }
 
-      if ( $monitor->save($changes) ) {
+      if ( $monitor->insert($changes) ) {
         $mid = $monitor->Id();
         $zoneArea = $_REQUEST['newMonitor']['Width'] * $_REQUEST['newMonitor']['Height'];
         dbQuery("INSERT INTO Zones SET MonitorId = ?, Name = 'All', Type = 'Active', Units = 'Percent', NumCoords = 4, Coords = ?, Area=?, AlarmRGB = 0xff0000, CheckMethod = 'Blobs', MinPixelThreshold = 25, MinAlarmPixels=?, MaxAlarmPixels=?, FilterX = 3, FilterY = 3, MinFilterPixels=?, MaxFilterPixels=?, MinBlobPixels=?, MinBlobs = 1", array( $mid, sprintf( "%d,%d %d,%d %d,%d %d,%d", 0, 0, $_REQUEST['newMonitor']['Width']-1, 0, $_REQUEST['newMonitor']['Width']-1, $_REQUEST['newMonitor']['Height']-1, 0, $_REQUEST['newMonitor']['Height']-1 ), $zoneArea, intval(($zoneArea*3)/100), intval(($zoneArea*75)/100), intval(($zoneArea*3)/100), intval(($zoneArea*75)/100), intval(($zoneArea*2)/100)  ) );
@@ -265,8 +270,6 @@ if ( $action == 'save' ) {
   if ( $restart ) {
     if ( $monitor->Function() != 'None' and $monitor->Type() != 'WebSite' ) {
       $monitor->zmcControl('start');
-      if ( ($monitor->Function() == 'Modect' or $monitor->Function() == 'Mocord') and $monitor->Enabled() )
-        $monitor->zmaControl('start');
 
       if ( $monitor->Controllable() ) {
         $monitor->sendControlCommand('start');

@@ -238,7 +238,7 @@ function getNormalNavBarHTML($running, $user, $bandwidth_options, $view, $skin) 
         echo '</ul>';
 
         echo '<ul class="nav navbar-nav justify-content-end align-self-start flex-grow-1">';
-          echo getAcctCircleHTML($skin, $user);
+          echo getAccountCircleHTML($skin, $user);
           echo getStatusBtnHTML($status);
         echo '</ul>';
   }
@@ -295,50 +295,49 @@ function getCollapsedNavBarHTML($running, $user, $bandwidth_options, $view, $ski
 
   ?>
   <div class="fixed-top container-fluid p-0">
-  <nav class="navbar navbar-dark bg-dark px-1 flex-nowrap">
+    <nav class="navbar navbar-dark bg-dark px-1 flex-nowrap">
 
-    <div class="navbar-brand align-self-start px-0">
-      <?php echo getNavBrandHTML() ?>
-    </div>
+      <div class="navbar-brand align-self-start px-0">
+        <?php echo getNavBrandHTML() ?>
+      </div>
 
-    <nav class="navbar navbar-expand-md align-self-start px-0">
-    <ul class="nav navbar-nav list-group px-0">
-    <?php
+      <nav class="navbar navbar-expand-md align-self-start px-0">
+<?php
 
   // *** Build the statistics shown on the navigation bar ***
   if ( (!ZM_OPT_USE_AUTH) or $user ) {
-    ?>
-    <div id="reload" class="collapse navbar-collapse px-0">
+?>
+        <div id="reload" class="collapse navbar-collapse px-0">
 
-      <ul id="Version" class="pr-2">
-        <?php echo getZMVersionHTML() ?>
-      </ul>
+          <ul id="Version" class="pr-2 navbar-nav">
+            <?php echo getZMVersionHTML() ?>
+          </ul>
 
-      <ul id="Bandwidth" class="px-2">
-        <?php echo getBandwidthHTML($bandwidth_options, $user) ?>
-      </ul>
+          <ul id="Bandwidth" class="px-2 navbar-nav">
+            <?php echo getBandwidthHTML($bandwidth_options, $user) ?>
+          </ul>
 
-        <?php
-        echo getSysLoadHTML();
-        echo getDbConHTML();
-        echo getStorageHTML();
-        echo getShmHTML();
-        echo getLogIconHTML();
-        ?>
+          <ul class="nav navbar-nav list-group px-0">
+            <?php
+            echo getSysLoadHTML();
+            echo getDbConHTML();
+            echo getStorageHTML();
+            echo getShmHTML();
+            echo getLogIconHTML();
+            ?>
+          </ul>
 
-    </div>
-
+        </div>
 <?php 
   } // end if (!ZM_OPT_USE_AUTH) or $user )
 ?> 
-    </nav>
+      </nav>
 
-        <ul class="list-group list-group-horizontal ml-auto">
+      <ul class="list-group list-group-horizontal ml-auto">
         <?php
-        echo getAcctCircleHTML($skin, $user);
+        echo getAccountCircleHTML($skin, $user);
         echo getStatusBtnHTML($status);
         ?>
-        </ul>
       </ul>
 
     <!-- the Navigation Bar Hamburger Button   -->
@@ -349,30 +348,30 @@ function getCollapsedNavBarHTML($running, $user, $bandwidth_options, $view, $ski
       </button>
     <?php } ?>
 
-  <div style="background-color:#485460" class="dropdown-menu dropdown-menu-right px-3" id="main-header-nav">
-    <?php
-    if ( $user and $user['Username'] ) {
-        echo '<ul class="navbar-nav">';
-          echo getConsoleHTML();
-          echo getOptionsHTML();
-          echo getLogHTML();
-          echo getDevicesHTML();
-          echo getGroupsHTML($view);
-          echo getFilterHTML($view);
-          echo getCycleHTML($view);
-          echo getMontageHTML($view);
-          echo getMontageReviewHTML($view);
-          echo getRprtEvntAuditHTML($view);
-        echo '</ul>';
-    }
-    ?>
-  </div>
+      <div style="background-color:#485460" class="dropdown-menu dropdown-menu-right px-3" id="main-header-nav">
+      <?php
+      if ( $user and $user['Username'] ) {
+          echo '<ul class="navbar-nav">';
+            echo getConsoleHTML();
+            echo getOptionsHTML();
+            echo getLogHTML();
+            echo getDevicesHTML();
+            echo getGroupsHTML($view);
+            echo getFilterHTML($view);
+            echo getCycleHTML($view);
+            echo getMontageHTML($view);
+            echo getMontageReviewHTML($view);
+            echo getRprtEvntAuditHTML($view);
+          echo '</ul>';
+      }
+      ?>
+      </div>
 
-  </nav><!-- End First Navbar -->
+    </nav><!-- End First Navbar -->
 
-  <nav class="navbar navbar-expand-md bg-dark justify-content-center p-0">
-    <?php echo getConsoleBannerHTML() ?>
-  </nav><!-- End Second Navbar -->
+    <nav class="navbar navbar-expand-md bg-dark justify-content-center p-0">
+      <?php echo getConsoleBannerHTML() ?>
+    </nav><!-- End Second Navbar -->
   </div>
   
   <?php
@@ -730,14 +729,14 @@ function getHeaderFlipHTML() {
 }
 
 // Returns the html representing the logged in user name and avatar
-function getAcctCircleHTML($skin, $user=null) {
+function getAccountCircleHTML($skin, $user=null) {
   $result = '';
   
   if ( ZM_OPT_USE_AUTH and $user ) {
-    $result .= '<p id="getAcctCircleHTML" class="navbar-text mr-2">'.PHP_EOL;
+    $result .= '<li id="getAccountCircleHTML" class="navbar-text navbar-nav mr-2">'.PHP_EOL;
     $result .= makeLink('#', '<i class="material-icons">account_circle</i> '.  $user['Username'],
       (ZM_AUTH_TYPE == 'builtin'), 'id="logoutButton" data-toggle="modal" data-target="#modalLogout" data-backdrop="false"' ).PHP_EOL;
-    $result .= '</p>'.PHP_EOL;
+    $result .= '</li>'.PHP_EOL;
   }
   
   return $result;
@@ -749,21 +748,21 @@ function getStatusBtnHTML($status) {
   
   if ( canEdit('System') ) {
     //$result .= '<li class="nav-item dropdown">'.PHP_EOL;
-    $result .= '<form id="getStatusBtnHTML" class="form-inline">'.PHP_EOL;
+    $result .= '<li id="getStatusBtnHTML">'.PHP_EOL;
     $result .= '<button type="button" class="btn btn-default navbar-btn" id="stateModalBtn">' .$status. '</button>'.PHP_EOL;
-    $result .= '</form>'.PHP_EOL;
+    $result .= '</li>'.PHP_EOL;
     //$result .= '</li>'.PHP_EOL;
 
     if ( ZM_SYSTEM_SHUTDOWN ) {
-      $result .= '<div class="navbar-text pr-2 align-self-center">'.PHP_EOL;
+      $result .= '<li class="navbar-text pr-2 align-self-center">'.PHP_EOL;
       $result .= '<button class="btn btn-outline" data-on-click="getShutdownModal" data-toggle="tooltip" data-placement="top" title="' .translate("Shutdown"). '" ><i class="material-icons md-18">power_settings_new</i></button>'.PHP_EOL;
-      $result .= '</div>'.PHP_EOL;
+      $result .= '</li>'.PHP_EOL;
      } 
 
   } else if ( canView('System') ) {
-    $result .= '<p id="getStatusBtnHTML" class="navbar-text">'.PHP_EOL;
+    $result .= '<li id="getStatusBtnHTML" class="navbar-text">'.PHP_EOL;
     $result .= $status.PHP_EOL;
-    $result .= '</p>'.PHP_EOL;
+    $result .= '</li>'.PHP_EOL;
   }
   
   return $result;
@@ -864,11 +863,6 @@ function xhtmlFooter() {
   $viewJsFile = getSkinFile('views/js/'.$basename.'.js');
   $viewJsPhpFile = getSkinFile('views/js/'.$basename.'.js.php');
 ?>
-<?php if ( $basename != 'login' and $basename != 'postlogin' ) { ?>
-  <script src="tools/mootools/mootools-core.js"></script>
-  <script src="tools/mootools/mootools-more.js"></script>
-  <script src="js/mootools.ext.js"></script>
-<?php } ?>
   <script src="skins/<?php echo $skin; ?>/js/jquery.min.js"></script>
   <script src="skins/<?php echo $skin; ?>/js/jquery-ui-1.12.1/jquery-ui.min.js"></script>
   <script src="skins/<?php echo $skin; ?>/js/bootstrap.min.js"></script>

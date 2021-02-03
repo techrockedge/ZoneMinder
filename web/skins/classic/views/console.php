@@ -134,8 +134,6 @@ for ( $i = 0; $i < count($displayMonitors); $i++ ) {
     if ( $maxWidth < $scaleWidth ) $maxWidth = $scaleWidth;
     if ( $maxHeight < $scaleHeight ) $maxHeight = $scaleHeight;
   }
-  #$monitor['zmc'] = zmcStatus( $monitor );
-  #$monitor['zma'] = zmaStatus( $monitor );
   $zoneCount += $monitor['ZoneCount'];
 
   $counts = array();
@@ -240,7 +238,7 @@ ob_start();
 ?>
             <th class="colZones"><a href="?view=zones"><?php echo translate('Zones') ?></a></th>
 <?php if ( canEdit('Monitors') ) { ?>
-            <th class="colMark"><input type="checkbox" name="toggleCheck" value="1" data-checkbox-name="markMids[]" data-on-click-this="updateFormCheckboxesByName"/> <?php echo translate('All') ?></th>
+            <th class="colMark"><input type="checkbox" name="toggleCheck" value="1" data-checkbox-name="markMids[]" data-on-click-this="updateFormCheckboxesByName"/></th>
 <?php } ?>
           </tr>
         </thead>

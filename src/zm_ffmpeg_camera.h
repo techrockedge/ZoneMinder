@@ -25,7 +25,6 @@
 #include "zm_buffer.h"
 #include "zm_ffmpeg.h"
 #include "zm_videostore.h"
-#include "zm_packetqueue.h"
 
 #if HAVE_LIBAVUTIL_HWCONTEXT_H
 typedef struct DecodeContext {
@@ -41,27 +40,15 @@ class FfmpegCamera : public Camera {
     std::string         mPath;
     std::string         mMethod;
     std::string         mOptions;
+
+    std::string         encoder_options;
     std::string         hwaccel_name;
     std::string         hwaccel_device;
 
     int frameCount;    
   
-    int alignment;      /* ffmpeg wants line sizes to be 32bit aligned.  Especially 4.3+ */
-
-#if HAVE_LIBAVFORMAT
-    AVFormatContext     *mFormatContext;
-    int                 mVideoStreamId;
-    int                 mAudioStreamId;
-    AVCodecContext      *mVideoCodecContext;
-    AVCodecContext      *mAudioCodecContext;
-    AVCodec             *mVideoCodec;
-    AVCodec             *mAudioCodec;
-    AVFrame             *mRawFrame; 
-    AVFrame             *mFrame;
     _AVPIXELFORMAT      imagePixFormat;
-    AVFrame             *input_frame;         // Use to point to mRawFrame or hwFrame;
 
-    AVFrame             *hwFrame; // Will also be used to indicate if hwaccel is in use
     bool                use_hwaccel; //will default to on if hwaccel specified, will get turned off if there is a failure
 #if HAVE_LIBAVUTIL_HWCONTEXT_H
     AVBufferRef *hw_device_ctx = nullptr;
@@ -75,16 +62,10 @@ class FfmpegCamera : public Camera {
     int OpenFfmpeg();
     int Close();
     bool mCanCapture;
-#endif // HAVE_LIBAVFORMAT
-
-    VideoStore          *videoStore;
-    zm_packetqueue      *packetqueue;
-    bool                have_video_keyframe;
 
 #if HAVE_LIBSWSCALE
     struct SwsContext   *mConvertContext;
 #endif
-    uint8_t *frame_buffer;
 
     int                 error_count;
 
@@ -112,16 +93,11 @@ class FfmpegCamera : public Camera {
     const std::string &Options() const { return mOptions; } 
     const std::string &Method() const { return mMethod; }
 
-    void Initialise();
-    void Terminate();
-
     int PrimeCapture();
     int PreCapture();
-    int Capture( Image &image );
-    int CaptureAndRecord( Image &image, timeval recording, char* event_directory );
+    int Capture(ZMPacket &p);
     int PostCapture();
   private:
     static int FfmpegInterruptCallback(void*ctx);
-    int transfer_to_image(Image &i, AVFrame *output_frame, AVFrame *input_frame);
 };
 #endif // ZM_FFMPEG_CAMERA_H

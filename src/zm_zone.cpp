@@ -18,7 +18,6 @@
 // 
 
 #define __STDC_FORMAT_MACROS 1
-#include <cinttypes>
 #include "zm.h"
 #include "zm_db.h"
 #include "zm_zone.h"
@@ -844,12 +843,11 @@ int Zone::Load(Monitor *monitor, Zone **&zones) {
   }
 
   MYSQL_RES *result = mysql_store_result(&dbconn);
+  db_mutex.unlock();
   if ( !result ) {
     Error("Can't use query result: %s", mysql_error(&dbconn));
-    db_mutex.unlock();
     return 0;
   }
-  db_mutex.unlock();
   int n_zones = mysql_num_rows(result);
   Debug(1, "Got %d zones for monitor %s", n_zones, monitor->Name());
   delete[] zones;

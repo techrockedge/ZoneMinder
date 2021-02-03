@@ -23,7 +23,7 @@
 #include "zm.h"
 #include "zm_camera.h"
 #include "zm_image.h"
-#include "zm_packetqueue.h"
+#include "zm_packet.h"
 
 #if ZM_HAS_V4L
 
@@ -49,18 +49,15 @@
 // directly connect to the host machine and which are accessed
 // via a video interface.
 //
-class LocalCamera : public Camera
-{
+class LocalCamera : public Camera {
 protected:
 #if ZM_HAS_V4L2
-    struct V4L2MappedBuffer
-    {
+    struct V4L2MappedBuffer {
         void    *start;
         size_t  length;
     };
 
-    struct V4L2Data
-    {
+    struct V4L2Data {
         v4l2_cropcap        cropcap;
         v4l2_crop           crop;
         v4l2_format         fmt;
@@ -71,8 +68,7 @@ protected:
 #endif // ZM_HAS_V4L2
 
 #if ZM_HAS_V4L1
-    struct V4L1Data
-    {
+    struct V4L1Data {
         int active_frame;
         video_mbuf frames;
         video_mmap *buffers;
@@ -146,26 +142,25 @@ public:
   void Initialise();
   void Terminate();
 
-  const std::string &Device() const { return( device ); }
+  const std::string &Device() const { return device; }
 
-  int Channel() const { return( channel ); }
-  int Standard() const { return( standard ); }
-  int Palette() const { return( palette ); }
-  int Extras() const { return( extras ); }
+  int Channel() const { return channel; }
+  int Standard() const { return standard; }
+  int Palette() const { return palette; }
+  int Extras() const { return extras; }
 
   int Brightness( int p_brightness=-1 ) override;
   int Hue( int p_hue=-1 ) override;
   int Colour( int p_colour=-1 ) override;
   int Contrast( int p_contrast=-1 ) override;
 
-  int PrimeCapture()override ;
-  int PreCapture()override ;
-  int Capture( Image &image )override ;
-  int PostCapture()override ;
-  int CaptureAndRecord( Image &image, timeval recording, char* event_directory ) override {return(0);};
+  int PrimeCapture() override;
+  int PreCapture() override;
+  int Capture(ZMPacket &p) override;
+  int PostCapture() override;
   int Close() override { return 0; };
 
-  static bool GetCurrentSettings( const char *device, char *output, int version, bool verbose );
+  static bool GetCurrentSettings(const char *device, char *output, int version, bool verbose);
 };
 
 #endif // ZM_HAS_V4L

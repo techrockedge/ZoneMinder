@@ -391,7 +391,7 @@ echo getNavBarHTML();
 
   <div class="row flex-nowrap">
     <nav>  <!-- BEGIN PILL LIST -->
-    <ul class="nav nav-pills flex-column h-100" id="pills-tab" role="tabList" aria-orientation="vertical">
+    <ul class="nav nav-pills flex-column h-100" id="pills-tab" role="tablist" aria-orientation="vertical">
 <?php
 $tabs = array();
 $tabs['general'] = translate('General');
@@ -465,7 +465,7 @@ if ( canEdit('Monitors') ) {
     <div class="d-flex flex-row container-fluid pr-0">
     <form name="contentForm" id="contentForm" method="post" action="?view=monitor">
       <input type="hidden" name="tab" value="<?php echo $tab?>"/>
-      <input type="hidden" name="mid" value="<?php echo $monitor->Id()?>"/>
+      <input type="hidden" name="mid" value="<?php echo $monitor->Id() ? $monitor->Id() : validHtmlStr($_REQUEST['mid']) ?>"/>
       <input type="hidden" name="origMethod" value="<?php echo ( null !== $monitor->Method())?validHtmlStr($monitor->Method()):'' ?>"/>
 <div class="tab-content" id="pills-tabContent">
 <?php
@@ -843,33 +843,43 @@ include('_monitor_source_nvsocket.php');
           <td>
             <input type="number" name="newMonitor[Width]" value="<?php echo validHtmlStr($monitor->Width()) ?>" min="1"/>
             <input type="number" name="newMonitor[Height]" value="<?php echo validHtmlStr($monitor->Height()) ?>" min="1"/>
-<?php echo htmlselect('dimensions_select', array(
-  ''=>translate('Custom'),
-  '176x120'=>'176x120 QCIF',
-  '176x144'=>'176x14',
-  '320x240'=>'320x240',
-  '320x200'=>'320x200',
-  '352x240'=>'352x240 CIF',
-  '352x480'=>'352x480',
-  '640x480'=>'640x480',
-  '640x400'=>'640x400',
-  '704x240'=>'704x240 2CIF',
-  '704x480'=>'704x480 4CIF',
-  '704x576'=>'704x576 D1 PAL',
-  '720x480'=>'720x480 Full D1 NTSC',
-  '720x576'=>'720x576 Full D1 PAL',
-  '1280x720'=>'1280x720 720p',
-  '1280x800'=>'1280x800',
-  '1280x960'=>'1280x960 960p',
-  '1280x1024'=>'1280x1024 1MP',
-  '1600x1200'=>'1600x1200 2MP',
-  '1920x1080'=>'1920x1080 1080p',
-  '2048x1536'=>'2048x1536 3MP',
-  '2560x1440'=>'2560x1440 1440p QHD WQHD',
-  '2592x1944'=>'2592x1944 5MP',
-  '3840x2160'=>'3840x2160 4K UHD',
-), $monitor->Width().'x'.$monitor->Height()
-);
+<?php 
+        $resolutions =  
+          array(
+            ''=>translate('Custom'),
+            '176x120'=>'176x120 QCIF',
+            '176x144'=>'176x14',
+            '320x240'=>'320x240',
+            '320x200'=>'320x200',
+            '352x240'=>'352x240 CIF',
+            '352x480'=>'352x480',
+            '640x360'=>'640x360',
+            '640x400'=>'640x400',
+            '640x480'=>'640x480',
+            '704x240'=>'704x240 2CIF',
+            '704x480'=>'704x480 4CIF',
+            '704x576'=>'704x576 D1 PAL',
+            '720x480'=>'720x480 Full D1 NTSC',
+            '720x576'=>'720x576 Full D1 PAL',
+            '1280x720'=>'1280x720 720p',
+            '1280x800'=>'1280x800',
+            '1280x960'=>'1280x960 960p',
+            '1280x1024'=>'1280x1024 1MP',
+            '1600x1200'=>'1600x1200 2MP',
+            '1920x1080'=>'1920x1080 1080p',
+            '2048x1536'=>'2048x1536 3MP',
+            '2560x1440'=>'2560x1440 1440p QHD WQHD',
+            '2592x1944'=>'2592x1944 5MP',
+            '3840x2160'=>'3840x2160 4K UHD',
+          );
+        $selected = '';
+        if ( $monitor->Width() and $monitor->Height() ) {
+          $selected = $monitor->Width().'x'.$monitor->Height();
+          if ( ! isset($resolutions[$selected]) ) {
+            $resolutions[$selected] = $selected;
+          }
+        }
+        echo htmlselect('dimensions_select', $resolutions, $selected);
 ?>
           </td>
         </tr>
@@ -948,10 +958,54 @@ include('_monitor_source_nvsocket.php');
     $videowriteropts[2] = 'H264 Camera Passthrough';
   else
     $videowriteropts[2] = array('text'=>'H264 Camera Passthrough - only for FFMPEG','disabled'=>1);
-
-  echo htmlselect('newMonitor[VideoWriter]', $videowriteropts, $monitor->VideoWriter());
+	echo htmlSelect('newMonitor[VideoWriter]', $videowriteropts, $monitor->VideoWriter());
 ?>
-            </td></tr>
+              </td>
+            </tr>
+            <tr>
+              <td><?php echo translate('OutputCodec') ?></td>
+              <td>
+<?php
+$videowriter_codecs = array(
+  '0' => translate('Auto'),
+  '27' => 'h264',
+  '173' => 'h265/hevc',
+  '8' => 'mjpeg',
+  '1' => 'mpeg1',
+  '2' => 'mpeg2',
+);
+echo htmlSelect('newMonitor[OutputCodec]', $videowriter_codecs, $monitor->OutputCodec());
+?>
+              </td>
+            </tr>
+            <tr>
+              <td><?php echo translate('Encoder') ?></td>
+              <td>
+<?php
+$videowriter_encoders = array(
+  'auto' => translate('Auto'),
+  'h264_omx' => 'h264_omx',
+  'libx264' => 'libx264',
+  'h264_vaapi' => 'h264_vaapi',
+  'h264' => 'h264',
+  'mjpeg' => 'mjpeg',
+  'mpeg1' => 'mpeg1',
+  'mpeg2' => 'mpeg2',
+);
+ echo htmlSelect( 'newMonitor[Encoder]', $videowriter_encoders, $monitor->Encoder() );?></td></tr>
+            <tr>
+              <td><?php echo translate('OutputContainer') ?></td>
+              <td>
+<?php
+$videowriter_containers = array(
+  '' => translate('Auto'),
+  'mp4' => 'mp4',
+  'mkv' => 'mkv',
+);
+echo htmlSelect('newMonitor[OutputContainer]', $videowriter_containers, $monitor->OutputContainer());
+?>
+              </td>
+            </tr>
             <tr>
               <td class="text-right pr-3"><?php echo translate('OptionalEncoderParam'); echo makeHelpLink('OPTIONS_ENCODER_PARAMETERS') ?></td>
               <td>
@@ -1178,7 +1232,11 @@ echo htmlSelect('newMonitor[ReturnLocation]', $return_options, $monitor->ReturnL
         </tr>
         <tr>
           <td class="text-right pr-3"><?php echo translate('Exif'); echo makeHelpLink('OPTIONS_EXIF') ?></td>
-          <td><input type="checkbox" name="newMonitor[Exif]" value="1"<?php if ( $monitor->Exif() ) { ?> checked="checked"<?php } ?>/></td>
+          <td><input type="checkbox" name="newMonitor[Exif]" value="1"<?php echo $monitor->Exif() ? ' checked="checked"' : '' ?>/></td>
+        </tr>
+        <tr>
+          <td class="text-right pr-3"><?php echo translate('RTSPServer'); echo makeHelpLink('OPTIONS_RTSPSERVER') ?></td>
+          <td><input type="checkbox" name="newMonitor[RTSPServer]" value="1"<?php echo $monitor->RTSPServer() ? ' checked="checked"' : '' ?>/></td>
         </tr>
 <?php
         break;

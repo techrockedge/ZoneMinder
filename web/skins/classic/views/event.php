@@ -90,10 +90,14 @@ if ( isset($_REQUEST['replayMode']) )
 if ( isset($_COOKIE['replayMode']) && preg_match('#^[a-z]+$#', $_COOKIE['replayMode']) )
   $replayMode = validHtmlStr($_COOKIE['replayMode']);
 
-if ( ( ! $replayMode ) or ( ! $replayModes[$replayMode] ) ) {
+if ( ( !$replayMode ) or ( !$replayModes[$replayMode] ) ) {
   $replayMode = 'none';
 }
 
+$video_tag = false;
+if ( $Event->DefaultVideo() and ( $codec == 'MP4' or $codec == 'auto' ) ) {
+  $video_tag = true;
+}
 // videojs zoomrotate only when direct recording
 $Zoom = 1;
 $Rotation = 0;
@@ -127,10 +131,11 @@ xhtmlHeaders(__FILE__, translate('Event').' '.$Event->Id());
     <?php echo getNavBarHTML() ?>
 <?php 
 if ( !$Event->Id() ) {
-  echo 'Event was not found.';
-} else {
-  if ( !file_exists($Event->Path()) )
-    echo '<div class="error">Event was not found at '.$Event->Path().'.  It is unlikely that playback will be possible.</div>';
+  echo '<div class="error">Event was not found.</div>';
+}
+
+if ( $Event->Id() and !file_exists($Event->Path()) )
+  echo '<div class="error">Event was not found at '.$Event->Path().'.  It is unlikely that playback will be possible.</div>';
 ?>
 
 <!-- BEGIN HEADER -->
@@ -138,26 +143,43 @@ if ( !$Event->Id() ) {
       <div id="toolbar" >
         <button id="backBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Back') ?>" disabled><i class="fa fa-arrow-left"></i></button>
         <button id="refreshBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Refresh') ?>" ><i class="fa fa-refresh"></i></button>
+<?php if ( $Event->Id() ) { ?>
         <button id="renameBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Rename') ?>" disabled><i class="fa fa-font"></i></button>
         <button id="archiveBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Archive') ?>" disabled><i class="fa fa-archive"></i></button>
         <button id="unarchiveBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Unarchive') ?>" disabled><i class="fa fa-file-archive-o"></i></button>
         <button id="editBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Edit') ?>" disabled><i class="fa fa-pencil"></i></button>
         <button id="exportBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Export') ?>"><i class="fa fa-external-link"></i></button>
-        <button id="downloadBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('DownloadVideo') ?>"><i class="fa fa-download"></i></button>
+<?php
+  if ( $Event->DefaultVideo() ) {
+?>
+        <a class="btn btn-normal" href="<?php echo $Event->getStreamSrc(array('mode'=>'mp4'),'&amp;')?>" download><i class="fa fa-download"></i></a>
+<?php
+  } 
+?>
         <button id="statsBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Stats') ?>" ><i class="fa fa-info"></i></button>
         <button id="framesBtn" class="btn btn-normal" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Frames') ?>" ><i class="fa fa-picture-o"></i></button>
         <button id="deleteBtn" class="btn btn-danger" data-toggle="tooltip" data-placement="top" title="<?php echo translate('Delete') ?>"><i class="fa fa-trash"></i></button>
+<?php } // end if Event->Id ?>
       </div>
       
       <h2><?php echo translate('Event').' '.$Event->Id() ?></h2>
       
       <div class="d-flex flex-row">
-        <div id="replayControl"><label for="replayMode"><?php echo translate('Replay') ?></label><?php echo htmlSelect('replayMode', $replayModes, $replayMode, array('data-on-change'=>'changeReplayMode','id'=>'replayMode')); ?></div>
-        <div id="scaleControl"><label for="scale"><?php echo translate('Scale') ?></label><?php echo htmlSelect('scale', $scales, $scale, array('data-on-change'=>'changeScale','id'=>'scale')); ?></div>
-        <div id="codecControl"><label for="codec"><?php echo translate('Codec') ?></label><?php echo htmlSelect('codec', $codecs, $codec, array('data-on-change'=>'changeCodec','id'=>'codec')); ?></div>
+        <div id="replayControl">
+          <label for="replayMode"><?php echo translate('Replay') ?></label>
+          <?php echo htmlSelect('replayMode', $replayModes, $replayMode, array('data-on-change'=>'changeReplayMode','id'=>'replayMode')); ?>
+        </div>
+        <div id="scaleControl">
+          <label for="scale"><?php echo translate('Scale') ?></label>
+          <?php echo htmlSelect('scale', $scales, $scale, array('data-on-change'=>'changeScale','id'=>'scale')); ?>
+        </div>
+        <div id="codecControl">
+          <label for="codec"><?php echo translate('Codec') ?></label>
+          <?php echo htmlSelect('codec', $codecs, $codec, array('data-on-change'=>'changeCodec','id'=>'codec')); ?>
+        </div>
       </div>
     </div>
-
+<?php if ( $Event->Id() ) { ?>
 <!-- BEGIN VIDEO CONTENT ROW -->
     <div id="content" class="d-flex flex-row justify-content-center">
       <div class="">
@@ -170,7 +192,7 @@ if ( !$Event->Id() ) {
       <div id="eventVideo">
       <!-- VIDEO CONTENT -->
 <?php
-if ( ($codec == 'MP4' || $codec == 'auto' ) && $Event->DefaultVideo() ) {
+if ( $video_tag ) {
 ?>
         <div id="videoFeed">
           <video id="videoobj" class="video-js vjs-default-skin"
@@ -211,7 +233,9 @@ if ( (ZM_WEB_STREAM_METHOD == 'mpeg') && ZM_MPEG_LIVE_FORMAT ) {
           <div class="progressBox" id="progressBox" title="" style="width: 0%;"></div>
         </div><!--progressBar-->
       </div><!--imageFeed-->
-<?php } /*end if !DefaultVideo*/ ?>
+<?php
+} /*end if !DefaultVideo*/
+?>
         <p id="dvrControls">
           <button type="button" id="prevBtn" title="<?php echo translate('Prev') ?>" class="inactive" data-on-click-true="streamPrev">
           <i class="material-icons md-18">skip_previous</i>
@@ -253,41 +277,6 @@ echo htmlSelect('rate', $rates, intval($rate), array('id'=>'rateValue'));
           <span id="zoom"><?php echo translate('Zoom') ?>: <span id="zoomValue">1</span>x</span>
         </div>
       </div><!--eventVideo-->
-      <div id="eventStills" class="hidden">
-        <div id="eventThumbsPanel">
-          <div id="eventThumbs">
-          </div>
-        </div>
-        <div id="eventImagePanel">
-          <div id="eventImageFrame">
-            <img id="eventImage" src="graphics/transparent.png" alt=""/>
-            <div id="eventImageBar">
-              <div id="eventImageClose"><button type="button" data-on-click="hideEventImage"><?php echo translate('Close') ?></button></div>
-              <div id="eventImageStats" class="hidden"><button type="button" data-on-click="showFrameStats"><?php echo translate('Stats') ?></button></div>
-              <div id="eventImageData"><?php echo translate('Frame') ?> <span id="eventImageNo"></span></div>
-            </div>
-          </div>
-        </div>
-        <div id="eventImageNav">
-          <div id="thumbsSliderPanel">
-            <div id="alarmCue" class="alarmCue"></div>
-            <div id="thumbsSlider">
-              <div id="thumbsKnob">
-              </div>
-            </div>
-          </div>
-          <div id="eventImageButtons">
-            <div id="prevButtonsPanel">
-              <button id="prevEventBtn" type="button" data-on-click="prevEvent" disabled="disabled">&lt;E</button>
-              <button id="prevThumbsBtn" type="button" data-on-click="prevThumbs" disabled="disabled">&lt;&lt;</button>
-              <button id="prevImageBtn" type="button" data-on-click="prevImage" disabled="disabled">&lt;</button>
-              <button id="nextImageBtn" type="button" data-on-click="nextImage" disabled="disabled">&gt;</button>
-              <button id="nextThumbsBtn" type="button" data-on-click="nextThumbs" disabled="disabled">&gt;&gt;</button>
-              <button id="nextEventBtn" type="button" data-on-click="nextEvent" disabled="disabled">E&gt;</button>
-            </div>
-          </div>
-        </div>
-      </div>
 <?php
 } // end if Event exists
 ?>

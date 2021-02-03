@@ -19,8 +19,9 @@
 
 #ifndef ZM_FFMPEG_H
 #define ZM_FFMPEG_H
-#include <stdint.h>
-#include "zm.h"
+
+#include "zm_config.h"
+#include "zm_define.h"
 
 extern "C" {
 
@@ -41,6 +42,9 @@ extern "C" {
 #include <libavutil/avstring.h>
 #include "libavutil/audio_fifo.h"
 #include "libavutil/imgutils.h"
+#if HAVE_LIBAVUTIL_HWCONTEXT_H
+  #include "libavutil/hwcontext.h"
+#endif
 
 /* LIBAVUTIL_VERSION_CHECK checks for the right version of libav and FFmpeg
  * The original source is vlc (in modules/codec/avcodec/avcommon_compat.h)
@@ -323,14 +327,15 @@ void zm_dump_codecpar(const AVCodecParameters *par);
       );
 
 #if LIBAVUTIL_VERSION_CHECK(54, 4, 0, 74, 100)
-#define zm_dump_video_frame(frame,text) Debug(1, "%s: format %d %s %dx%d linesize:%dx%d pts: %" PRId64, \
+#define zm_dump_video_frame(frame, text) Debug(1, "%s: format %d %s %dx%d linesize:%dx%d pts: %" PRId64 " keyframe: %d", \
       text, \
       frame->format, \
       av_get_pix_fmt_name((AVPixelFormat)frame->format), \
       frame->width, \
       frame->height, \
       frame->linesize[0], frame->linesize[1], \
-      frame->pts \
+      frame->pts, \
+      frame->key_frame \
       );
 
 #else
@@ -346,8 +351,8 @@ void zm_dump_codecpar(const AVCodecParameters *par);
 #endif
 
 #if LIBAVCODEC_VERSION_CHECK(56, 8, 0, 60, 100)
-    #define zm_av_packet_unref( packet ) av_packet_unref( packet )
-    #define zm_av_packet_ref( dst, src ) av_packet_ref( dst, src )
+    #define zm_av_packet_unref(packet) av_packet_unref(packet)
+    #define zm_av_packet_ref(dst, src) av_packet_ref(dst, src)
 #else
     unsigned int zm_av_packet_ref( AVPacket *dst, AVPacket *src );
     #define zm_av_packet_unref( packet ) av_free_packet( packet )
@@ -355,10 +360,18 @@ void zm_dump_codecpar(const AVCodecParameters *par);
 
     void av_packet_rescale_ts(AVPacket *pkt, AVRational src_tb, AVRational dst_tb);
 #endif
-#if LIBAVCODEC_VERSION_CHECK(52, 23, 0, 23, 0)
-      #define zm_avcodec_decode_video( context, rawFrame, frameComplete, packet ) avcodec_decode_video2( context, rawFrame, frameComplete, packet )
+#if LIBAVCODEC_VERSION_CHECK(57, 24, 1, 45, 101)
+#define zm_avcodec_decode_video(context, rawFrame, frameComplete, packet) \
+ avcodec_send_packet(context, packet); \
+ avcodec_receive_frame(context, rawFrame);
 #else
-      #define zm_avcodec_decode_video(context, rawFrame, frameComplete, packet ) avcodec_decode_video( context, rawFrame, frameComplete, packet->data, packet->size)
+#if LIBAVCODEC_VERSION_CHECK(52, 23, 0, 23, 0)
+  #define zm_avcodec_decode_video(context, rawFrame, frameComplete, packet) \
+      avcodec_decode_video2(context, rawFrame, frameComplete, packet)
+#else
+   #define zm_avcodec_decode_video(context, rawFrame, frameComplete, packet) \
+      avcodec_decode_video(context, rawFrame, frameComplete, packet->data, packet->size)
+#endif
 #endif
     
 #if LIBAVCODEC_VERSION_CHECK(55, 28, 1, 45, 101)
@@ -372,6 +385,7 @@ void zm_dump_codecpar(const AVCodecParameters *par);
 #endif   
 
 int check_sample_fmt(AVCodec *codec, enum AVSampleFormat sample_fmt);
+void fix_deprecated_pix_fmt(AVCodecContext *);
 
 bool is_video_stream(const AVStream *);
 bool is_audio_stream(const AVStream *);
@@ -414,6 +428,7 @@ int zm_resample_get_delay(
 
 int zm_add_samples_to_fifo(AVAudioFifo *fifo, AVFrame *frame);
 int zm_get_samples_from_fifo(AVAudioFifo *fifo, AVFrame *frame);
+
 
 
 #endif // ZM_FFMPEG_H

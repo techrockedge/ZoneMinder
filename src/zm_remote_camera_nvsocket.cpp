@@ -68,6 +68,7 @@ RemoteCameraNVSocket::RemoteCameraNVSocket(
   timeout.tv_sec = 0;
   timeout.tv_usec = 0;
   subpixelorder = ZM_SUBPIX_ORDER_BGR;
+  mVideoStream = NULL;
 
   if ( capture ) {
     Initialise();
@@ -137,13 +138,13 @@ int RemoteCameraNVSocket::Disconnect() {
 }
 
 int RemoteCameraNVSocket::SendRequest( std::string request ) {
-  Debug( 4, "Sending request: %s", request.c_str() );
+  //Debug( 4, "Sending request: %s", request.c_str() );
   if ( write( sd, request.data(), request.length() ) < 0 ) {
     Error( "Can't write: %s", strerror(errno) );
     Disconnect();
     return( -1 );
   }
-  Debug( 4, "Request sent" );
+  //Debug( 4, "Request sent" );
   return( 0 );
 }
 
@@ -178,11 +179,12 @@ int RemoteCameraNVSocket::PrimeCapture() {
     Disconnect();
     return -1;
   }
+  mVideoStreamId=0;
 
   return 0;
 }
 
-int RemoteCameraNVSocket::Capture( Image &image ) {
+int RemoteCameraNVSocket::Capture( ZMPacket &zm_packet ) {
   if ( SendRequest("GetNextImage\n") < 0 ) {
     Warning( "Unable to capture image, retrying" );
     return 0;
@@ -202,7 +204,8 @@ int RemoteCameraNVSocket::Capture( Image &image ) {
     return 0;
   }
 
-  image.Assign(width, height, colours, subpixelorder, buffer, imagesize);
+  zm_packet.image->Assign(width, height, colours, subpixelorder, buffer, imagesize);
+  zm_packet.keyframe = 1;
   return 1;
 }
 

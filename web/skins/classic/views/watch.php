@@ -70,7 +70,7 @@ xhtmlHeaders(__FILE__, $monitor->Name().' - '.translate('Feed'));
       </div>
 
       <div>
-        <h2><?php echo validHtmlStr($monitor->Name()) ?></h2>
+        <h2><?php echo makeLink('?view=monitor&amp;mid='.$monitor->Id(), validHtmlStr($monitor->Name()), canEdit('Monitors')) ?></h2>
       </div>
 
       <div>
@@ -94,7 +94,15 @@ if ( $streamMode == 'jpeg' ) {
 
 <?php if ( $monitor->Type() != 'WebSite' ) { ?>
       <div id="monitorStatus">
-        <div id="monitorState"><?php echo translate('State') ?>:&nbsp;<span id="stateValue"></span>&nbsp;-&nbsp;<span id="fpsValue"></span>&nbsp;fps</div>
+        <div id="monitorState">
+          <?php echo translate('State') ?>:
+          <span id="stateValue"></span> -
+          <span title="<?php echo translate('Viewing FPS')?>"><span id="fpsValue"></span> fps</span>
+          <span title="<?php echo translate('Capturing FPS')?>"><span id="capturefpsValue"></span> fps</span>
+          <?php if ( $monitor->Function() == 'Modect' or $monitor->Function() == 'Mocord' ) { ?>
+          <span title="<?php echo translate('Analysis FPS')?>"><span id="analysisfpsValue"></span> fps</span>
+          <?php } ?>
+        </div>
       </div>
       <div id="dvrControls">
 <?php
@@ -132,8 +140,7 @@ if ( $streamMode == 'jpeg' ) {
   }
 ?>
         <button type="button" id="zoomOutBtn" title="<?php echo translate('ZoomOut') ?>" class="avail" data-on-click="streamCmdZoomOut">
-<i class="material-icons md-18">zoom_out</i>
-
+        <i class="material-icons md-18">zoom_out</i>
         </button>
 <?php
 } // end if streamMode==jpeg
