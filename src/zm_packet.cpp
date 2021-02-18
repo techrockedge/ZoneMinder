@@ -16,10 +16,11 @@
 //You should have received a copy of the GNU General Public License
 //along with ZoneMinder.  If not, see <http://www.gnu.org/licenses/>.
 
-
 #include "zm_packet.h"
-#include "zm_ffmpeg.h"
 
+#include "zm_ffmpeg.h"
+#include "zm_image.h"
+#include "zm_logger.h"
 #include <sys/time.h>
 
 using namespace std;
@@ -270,7 +271,7 @@ AVPacket *ZMPacket::set_packet(AVPacket *p) {
   if ( zm_av_packet_ref(&packet, p) < 0 ) {
     Error("error refing packet");
   }
-  //dumpPacket(&packet, "zmpacket:");
+  //ZM_DUMP_PACKET(packet, "zmpacket:");
   gettimeofday(timestamp, nullptr);
   keyframe = p->flags & AV_PKT_FLAG_KEY;
   return &packet;

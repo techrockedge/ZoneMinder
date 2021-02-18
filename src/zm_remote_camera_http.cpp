@@ -18,14 +18,13 @@
 // 
 
 #include "zm_remote_camera_http.h"
-#include "zm_rtsp_auth.h"
 
-#include "zm_mem_utils.h"
+#include "zm_monitor.h"
+#include "zm_packet.h"
 #include "zm_signal.h"
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <errno.h>
+#include "zm_regexp.h"
+#include "zm_utils.h"
+#include <arpa/inet.h>
 #include <netdb.h>
 
 #ifdef SOLARIS
@@ -44,7 +43,7 @@ static RegExpr *content_type_expr = nullptr;
 #endif
 
 RemoteCameraHttp::RemoteCameraHttp(
-  unsigned int p_monitor_id,
+  const Monitor *monitor,
   const std::string &p_method,
   const std::string &p_host,
   const std::string &p_port,
@@ -58,7 +57,7 @@ RemoteCameraHttp::RemoteCameraHttp(
   bool p_capture,
   bool p_record_audio ) :
   RemoteCamera(
-    p_monitor_id,
+    monitor,
     "http",
     p_host,
     p_port,
@@ -83,11 +82,11 @@ RemoteCameraHttp::RemoteCameraHttp(
   else if ( p_method == "regexp" ) {
     method = REGEXP;
   } else
-    Fatal( "Unrecognised method '%s' when creating HTTP camera %d", p_method.c_str(), monitor_id );
+    Fatal("Unrecognised method '%s' when creating HTTP camera %d", p_method.c_str(), monitor->Id());
   if ( capture ) {
     Initialise();
   }
-  mVideoStream = NULL;
+  mVideoStream = nullptr;
 }
 
 RemoteCameraHttp::~RemoteCameraHttp() {
@@ -158,7 +157,7 @@ int RemoteCameraHttp::Connect() {
       addr = (struct sockaddr_in *)p->ai_addr; 
       inet_ntop( AF_INET, &(addr->sin_addr), buf, INET6_ADDRSTRLEN );
 
-      Warning("Can't connect to remote camera mid: %d at %s: %s", monitor_id, buf, strerror(errno) );
+      Warning("Can't connect to remote camera mid: %d at %s: %s", monitor->Id(), buf, strerror(errno));
       continue;
     }
 
@@ -1047,6 +1046,7 @@ int RemoteCameraHttp::PrimeCapture() {
     mode = SINGLE_IMAGE;
     buffer.clear();
   }
+  get_VideoStream();
   return 1;
 }
 
@@ -1088,6 +1088,7 @@ int RemoteCameraHttp::Capture(ZMPacket &packet) {
   Image *image = packet.image;
   packet.keyframe = 1;
   packet.codec_type = AVMEDIA_TYPE_VIDEO;
+  packet.packet.stream_index = mVideoStreamId;
 
   switch ( format ) {
     case JPEG :

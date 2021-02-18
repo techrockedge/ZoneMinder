@@ -20,16 +20,13 @@
 #ifndef ZM_CURL_CAMERA_H
 #define ZM_CURL_CAMERA_H
 
-#if HAVE_LIBCURL
-
-#include "zm_camera.h"
-#include "zm_ffmpeg.h"
+#include "zm_config.h"
 #include "zm_buffer.h"
-#include "zm_regexp.h"
-#include "zm_utils.h"
-#include "zm_signal.h"
-#include <string>
+#include "zm_camera.h"
 #include <deque>
+#include <string>
+
+#if HAVE_LIBCURL
 
 #if HAVE_CURL_CURL_H
 #include <curl/curl.h>
@@ -64,7 +61,7 @@ protected:
   pthread_cond_t request_complete_cond;
 
 public:
-  cURLCamera( int p_id, const std::string &path, const std::string &username, const std::string &password, unsigned int p_width, unsigned int p_height, int p_colours, int p_brightness, int p_contrast, int p_hue, int p_colour, bool p_capture, bool p_record_audio );
+  cURLCamera( const Monitor* monitor, const std::string &path, const std::string &username, const std::string &password, unsigned int p_width, unsigned int p_height, int p_colours, int p_brightness, int p_contrast, int p_hue, int p_colour, bool p_capture, bool p_record_audio );
   ~cURLCamera();
 
   const std::string &Path() const { return( mPath ); }

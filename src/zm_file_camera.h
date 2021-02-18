@@ -21,11 +21,6 @@
 #define ZM_FILE_CAMERA_H
 
 #include "zm_camera.h"
-#include "zm_buffer.h"
-#include "zm_regexp.h"
-#include "zm_packet.h"
-
-#include <sys/param.h>
 
 //
 // Class representing 'file' cameras, i.e. those which are
@@ -37,7 +32,7 @@ protected:
 
 public:
   FileCamera(
-      int p_id,
+      const Monitor *monitor,
       const char *p_path,
       int p_width,
       int p_height,

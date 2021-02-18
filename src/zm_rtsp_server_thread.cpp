@@ -1,16 +1,15 @@
+#include "zm_rtsp_server_thread.h"
 
-#include "zm.h"
+#include "zm_config.h"
+#include "zm_rtsp_server_adts_source.h"
+#include "zm_rtsp_server_h264_device_source.h"
+#include "zm_rtsp_server_unicast_server_media_subsession.h"
 
 #if HAVE_RTSP_SERVER
-#include "zm_rtsp_server_thread.h"
-#include "zm_rtsp_server_device_source.h"
-#include "zm_rtsp_server_h264_device_source.h"
-#include "zm_rtsp_server_adts_source.h"
-#include "zm_rtsp_server_unicast_server_media_subsession.h"
 #include <StreamReplicator.hh>
 
-RTSPServerThread::RTSPServerThread(Monitor *p_monitor) : 
-  monitor(p_monitor),
+RTSPServerThread::RTSPServerThread(std::shared_ptr<Monitor> monitor) :
+  monitor_(std::move(monitor)),
   terminate(0)
 {
   //unsigned short rtsp_over_http_port = 0;
@@ -24,7 +23,7 @@ RTSPServerThread::RTSPServerThread(Monitor *p_monitor) :
   //authDB = new UserAuthenticationDatabase("ZoneMinder");
   //authDB->addUserRecord("username1", "password1"); // replace these with real strings
 
-  portNumBits rtspServerPortNum = config.min_rtsp_port + monitor->Id();
+  portNumBits rtspServerPortNum = config.min_rtsp_port + monitor_->Id();
   rtspServer = RTSPServer::createNew(*env, rtspServerPortNum, authDB);
 
   if ( rtspServer == nullptr ) {
@@ -88,9 +87,9 @@ void RTSPServerThread::addStream(AVStream *video_stream, AVStream *audio_stream)
     } 
     Debug(1, "RTSP: format %s", rtpFormat.c_str());
     if ( rtpFormat == "video/H264" ) {
-      source = H264_ZoneMinderDeviceSource::createNew(*env, monitor, video_stream, queueSize, repeatConfig, muxTS);
+      source = H264_ZoneMinderDeviceSource::createNew(*env, monitor_, video_stream, queueSize, repeatConfig, muxTS);
     } else if ( rtpFormat == "video/H265" ) {
-      source = H265_ZoneMinderDeviceSource::createNew(*env, monitor, video_stream, queueSize, repeatConfig, muxTS);
+      source = H265_ZoneMinderDeviceSource::createNew(*env, monitor_, video_stream, queueSize, repeatConfig, muxTS);
     }
     if ( source == nullptr ) {
       Error("Unable to create source");
@@ -111,7 +110,7 @@ void RTSPServerThread::addStream(AVStream *video_stream, AVStream *audio_stream)
     FramedSource *source = nullptr;
     std::string rtpFormat = getRtpFormat(audio_stream->codecpar->codec_id, false);
     if ( rtpFormat == "audio/AAC" ) {
-      source = ADTS_ZoneMinderDeviceSource::createNew(*env, monitor, audio_stream, queueSize);
+      source = ADTS_ZoneMinderDeviceSource::createNew(*env, monitor_, audio_stream, queueSize);
       Debug(1, "ADTS source %p", source);
     }
     if ( source ) {
@@ -155,4 +154,4 @@ const std::string RTSPServerThread::getRtpFormat(AVCodecID codec_id, bool muxTS)
 
   return "";
 }
-#endif
+#endif // HAVE_RTSP_SERVER

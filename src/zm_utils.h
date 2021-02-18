@@ -20,10 +20,11 @@
 #ifndef ZM_UTILS_H
 #define ZM_UTILS_H
 
-#include <time.h>
+#include <chrono>
+#include <ctime>
+#include <memory>
 #include <sys/time.h>
 #include <string>
-#include <sstream>
 #include <vector>
 
 typedef std::vector<std::string> StringVector;
@@ -45,16 +46,6 @@ void string_toupper(std::string& str);
 int split(const char* string, const char delim, std::vector<std::string>& items);
 int pairsplit(const char* string, const char delim, std::string& name, std::string& value);
 
-inline int max( int a, int b )
-{
-  return( a>=b?a:b );
-}
-
-inline int min( int a, int b )
-{
-  return( a<=b?a:b );
-}
-
 void* sse2_aligned_memcpy(void* dest, const void* src, size_t bytes);
 void timespec_diff(struct timespec *start, struct timespec *end, struct timespec *diff);
 
@@ -65,4 +56,33 @@ extern unsigned int neonversion;
 char *timeval_to_string( struct timeval tv );
 std::string UriDecode( const std::string &encoded );
 void touch( const char *pathname );
+
+namespace ZM {
+//! std::make_unique implementation (TODO: remove this once C++14 is supported)
+template<typename T, typename ...Args>
+inline auto make_unique(Args &&...args) ->
+typename std::enable_if<!std::is_array<T>::value, std::unique_ptr<T>>::type {
+  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+template<typename T>
+inline auto make_unique(std::size_t size) ->
+typename std::enable_if<std::is_array<T>::value && std::extent<T>::value == 0, std::unique_ptr<T>>::type {
+  return std::unique_ptr<T>(new typename std::remove_extent<T>::type[size]());
+}
+
+template<typename T, typename... Args>
+inline auto make_unique(Args &&...) ->
+typename std::enable_if<std::extent<T>::value != 0, void>::type = delete;
+}
+
+typedef std::chrono::microseconds Microseconds;
+typedef std::chrono::milliseconds Milliseconds;
+typedef std::chrono::seconds Seconds;
+typedef std::chrono::minutes Minutes;
+typedef std::chrono::hours Hours;
+
+typedef std::chrono::steady_clock::time_point TimePoint;
+typedef std::chrono::system_clock::time_point SystemTimePoint;
+
 #endif // ZM_UTILS_H

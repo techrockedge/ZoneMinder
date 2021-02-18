@@ -19,24 +19,18 @@
 
 #include "zm_logger.h"
 
-#include "zm_config.h"
-#include "zm_utils.h"
 #include "zm_db.h"
-
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/time.h>
-#include <syslog.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <errno.h>
+#include "zm_utils.h"
+#include <csignal>
+#include <cstdarg>
+#include <cstring>
 #include <libgen.h>
+#include <syslog.h>
+#include <sys/time.h>
+
 #ifdef __FreeBSD__
 #include <sys/thr.h>
 #endif
-#include <cstdarg>
 
 bool Logger::smInitialised = false;
 Logger *Logger::smInstance = nullptr;
@@ -344,17 +338,17 @@ Logger::Level Logger::terminalLevel(Logger::Level terminalLevel) {
 }
 
 Logger::Level Logger::databaseLevel(Logger::Level databaseLevel) {
-  if ( databaseLevel > NOOPT ) {
+  if (databaseLevel > NOOPT) {
     databaseLevel = limit(databaseLevel);
-    if ( mDatabaseLevel != databaseLevel ) {
-      if ( (databaseLevel > NOLOG) && (mDatabaseLevel <= NOLOG) ) { // <= NOLOG would be NOOPT
-        if ( !zmDbConnect() ) {
+    if (mDatabaseLevel != databaseLevel) {
+      if ((databaseLevel > NOLOG) && (mDatabaseLevel <= NOLOG)) { // <= NOLOG would be NOOPT
+        if (!zmDbConnected) {
           databaseLevel = NOLOG;
         }
-      }  // end if ( databaseLevel > NOLOG && mDatabaseLevel <= NOLOG )
+      }
       mDatabaseLevel = databaseLevel;
-    }  // end if ( mDatabaseLevel != databaseLevel )
-  }  // end if ( databaseLevel > NOOPT )
+    }
+  }
 
   return mDatabaseLevel;
 }
@@ -540,7 +534,7 @@ void Logger::logPrint(bool hex, const char * const filepath, const int line, con
   }  // end if level <= mFileLevel
 
   if ( level <= mDatabaseLevel ) {
-    if ( !db_mutex.trylock() ) {
+    if (db_mutex.try_lock_for(1)) {
       char escapedString[(strlen(syslogStart)*2)+1];
       mysql_real_escape_string(&dbconn, escapedString, syslogStart, strlen(syslogStart));
 
@@ -562,10 +556,9 @@ void Logger::logPrint(bool hex, const char * const filepath, const int line, con
     } else {
       Level tempDatabaseLevel = mDatabaseLevel;
       databaseLevel(NOLOG);
-      Error("Can't insert log entry: sql(%s) error(%s)", syslogStart, mysql_error(&dbconn));
+      Error("Can't insert log entry since the DB lock could not be obtained. Message: %s", syslogStart);
       databaseLevel(tempDatabaseLevel);
     }
-    db_mutex.unlock();
   }  // end if level <= mDatabaseLevel
 
   if ( level <= mSyslogLevel ) {

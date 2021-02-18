@@ -18,8 +18,10 @@
 */ 
 
 #include "zm_ffmpeg.h"
-#include "zm_image.h"
+
+#include "zm_logger.h"
 #include "zm_rgb.h"
+
 extern "C" {
 #include "libavutil/pixdesc.h"
 }
@@ -83,7 +85,7 @@ void FFMPEGInit() {
       Debug(1,"Not enabling ffmpeg logs, as LOG_FFMPEG and/or LOG_DEBUG is disabled in options, or this monitor is not part of your debug targets");
       av_log_set_level(AV_LOG_QUIET);
     }
-#if !LIBAVFORMAT_VERSION_CHECK(58, 9, 0, 64, 0)
+#if !LIBAVFORMAT_VERSION_CHECK(58, 9, 58, 9, 0)
     av_register_all();
 #endif
     avformat_network_init();
@@ -219,61 +221,6 @@ simple_round:
 }
 #endif
 #endif
-
-int hacked_up_context2_for_older_ffmpeg(AVFormatContext **avctx, AVOutputFormat *oformat, const char *format, const char *filename) {
-  AVFormatContext *s = avformat_alloc_context();
-  int ret = 0;
-
-  *avctx = nullptr;
-  if (!s) {
-    av_log(s, AV_LOG_ERROR, "Out of memory\n");
-    ret = AVERROR(ENOMEM);
-    return ret;
-  }
-
-  if (!oformat) {
-    if (format) {
-      oformat = av_guess_format(format, nullptr, nullptr);
-      if (!oformat) {
-        av_log(s, AV_LOG_ERROR, "Requested output format '%s' is not a suitable output format\n", format);
-        ret = AVERROR(EINVAL);
-      }
-    } else {
-      oformat = av_guess_format(nullptr, filename, nullptr);
-      if (!oformat) {
-        ret = AVERROR(EINVAL);
-        av_log(s, AV_LOG_ERROR, "Unable to find a suitable output format for '%s'\n", filename);
-      }
-    }
-  }
-
-  if (ret) {
-    avformat_free_context(s);
-    return ret;
-  }
-
-  s->oformat = oformat;
-#if 0
-  if (s->oformat->priv_data_size > 0) {
-      if (s->oformat->priv_class) {
-        // This looks wrong, we just allocated priv_data and now we are losing the pointer to it.FIXME
-        *(const AVClass**)s->priv_data = s->oformat->priv_class;
-        av_opt_set_defaults(s->priv_data);
-      } else {
-    s->priv_data = av_mallocz(s->oformat->priv_data_size);
-    if ( ! s->priv_data) {
-      av_log(s, AV_LOG_ERROR, "Out of memory\n");
-      ret = AVERROR(ENOMEM);
-      return ret;
-    }
-    s->priv_data = nullptr;
-  }
-#endif
-
-  if (filename) strncpy(s->filename, filename, sizeof(s->filename)-1);
-  *avctx = s;
-  return 0;
-}
 
 static void zm_log_fps(double d, const char *postfix) {
   uint64_t v = lrintf(d * 100);
@@ -427,23 +374,19 @@ int check_sample_fmt(AVCodec *codec, enum AVSampleFormat sample_fmt) {
   return 0;
 }
 
-void fix_deprecated_pix_fmt(AVCodecContext *ctx) {
+enum AVPixelFormat fix_deprecated_pix_fmt(enum AVPixelFormat fmt) {
   // Fix deprecated formats
-  switch ( ctx->pix_fmt ) {
+  switch ( fmt ) {
     case AV_PIX_FMT_YUVJ422P  :
-      ctx->pix_fmt = AV_PIX_FMT_YUV422P;
-      break;
+      return AV_PIX_FMT_YUV422P;
     case AV_PIX_FMT_YUVJ444P   :
-      ctx->pix_fmt = AV_PIX_FMT_YUV444P;
-      break;
+      return AV_PIX_FMT_YUV444P;
     case AV_PIX_FMT_YUVJ440P :
-      ctx->pix_fmt = AV_PIX_FMT_YUV440P;
-      break;
+      return AV_PIX_FMT_YUV440P;
     case AV_PIX_FMT_NONE :
     case AV_PIX_FMT_YUVJ420P :
     default:
-      ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-      break;
+      return AV_PIX_FMT_YUV420P;
   }
 }
 
@@ -552,7 +495,7 @@ int zm_receive_packet(AVCodecContext *context, AVPacket &packet) {
     }
     return ret;
   }
-  return 1;
+  return ret; // 1 or 0
 #else
   int got_packet = 0;
   int ret = avcodec_encode_audio2(context, &packet, nullptr, &got_packet);
@@ -647,36 +590,6 @@ int zm_send_frame_receive_packet(AVCodecContext *ctx, AVFrame *frame, AVPacket &
   return 1;
 }  // end int zm_send_frame_receive_packet
 
-void dumpPacket(AVStream *stream, AVPacket *pkt, const char *text) {
-  char b[10240];
-
-  double pts_time = (double)av_rescale_q(pkt->pts,
-      stream->time_base,
-      AV_TIME_BASE_Q
-      ) / AV_TIME_BASE;
-
-  snprintf(b, sizeof(b),
-           " pts: %" PRId64 "=%f, dts: %" PRId64
-           ", size: %d, stream_index: %d, flags: %04x, keyframe(%d) pos: %" PRId64
-           ", duration: %" 
-#if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
-           PRIu64
-#else
-           "d"
-#endif
-           "\n",
-           pkt->pts, 
-           pts_time,
-           pkt->dts,
-           pkt->size,
-           pkt->stream_index,
-           pkt->flags,
-           pkt->flags & AV_PKT_FLAG_KEY,
-           pkt->pos,
-           pkt->duration);
-  Debug(2, "%s:%d:%s: %s", __FILE__, __LINE__, text, b);
-}
-
 void zm_free_codec( AVCodecContext **ctx ) {
   if ( *ctx ) {
     avcodec_close(*ctx);
@@ -686,30 +599,6 @@ void zm_free_codec( AVCodecContext **ctx ) {
 #endif
     *ctx = NULL;
   } // end if 
-}
-
-void dumpPacket(AVPacket *pkt, const char *text) {
-  char b[10240];
-
-  snprintf(b, sizeof(b),
-           " pts: %" PRId64 ", dts: %" PRId64
-           ", size: %d, stream_index: %d, flags: %04x, keyframe(%d) pos: %" PRId64
-           ", duration: %"
-#if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
-           PRId64
-#else
-           "d"
-#endif
-           "\n",
-           pkt->pts,
-           pkt->dts,
-           pkt->size,
-           pkt->stream_index,
-           pkt->flags,
-           pkt->flags & AV_PKT_FLAG_KEY,
-           pkt->pos,
-           pkt->duration);
-  Debug(2, "%s:%d:%s: %s", __FILE__, __LINE__, text, b);
 }
 
 void zm_packet_copy_rescale_ts(const AVPacket *ipkt, AVPacket *opkt, const AVRational src_tb, const AVRational dst_tb) {

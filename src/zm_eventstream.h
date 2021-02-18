@@ -20,12 +20,11 @@
 #ifndef ZM_EVENTSTREAM_H
 #define ZM_EVENTSTREAM_H
 
-#include "zm_image.h"
-#include "zm_stream.h"
-#include "zm_video.h"
+#include "zm_define.h"
 #include "zm_ffmpeg_input.h"
 #include "zm_monitor.h"
 #include "zm_storage.h"
+#include "zm_stream.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,7 +35,6 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
 
 class EventStream : public StreamBase {
   public:
@@ -61,6 +59,7 @@ class EventStream : public StreamBase {
       time_t          start_time;
       time_t          end_time;
       double          duration;
+      double          frames_duration;
       char            path[PATH_MAX];
       int             n_frames;       // # of frame rows returned from database
       FrameData       *frames;
@@ -116,10 +115,6 @@ class EventStream : public StreamBase {
           }
           delete event_data;
           event_data = nullptr;
-        }
-        if ( monitor ) {
-          delete monitor;
-          monitor = nullptr;
         }
         if ( storage ) {
           delete storage;

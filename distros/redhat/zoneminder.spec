@@ -88,10 +88,6 @@ BuildRequires: zlib-devel
 BuildRequires: ffmpeg
 BuildRequires: ffmpeg-devel
 
-# Required for mp4 container support
-BuildRequires: libmp4v2-devel
-BuildRequires: x264-devel
-
 # Allow existing user base to seamlessly transition to sub-packages
 Requires: %{name}-common%{?_isa} = %{version}-%{release}
 Requires: %{name}-httpd%{?_isa} = %{version}-%{release}
@@ -345,7 +341,6 @@ ln -sf %{_sysconfdir}/zm/www/zoneminder.nginx.conf %{_sysconfdir}/zm/www/zonemin
 %{_datadir}/polkit-1/actions/com.zoneminder.systemctl.policy
 %{_bindir}/zmsystemctl.pl
 
-%{_bindir}/zma
 %{_bindir}/zmaudit.pl
 %{_bindir}/zmc
 %{_bindir}/zmcontrol.pl

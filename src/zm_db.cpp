@@ -16,12 +16,10 @@
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 
-
-#include <stdlib.h>
-#include <string.h>
-
-#include "zm.h"
 #include "zm_db.h"
+
+#include "zm_logger.h"
+#include <cstdlib>
 
 MYSQL dbconn;
 RecursiveMutex db_mutex;
@@ -62,6 +60,7 @@ bool zmDbConnect() {
           staticConfig.DB_PASS.c_str(),
           nullptr, 0, nullptr, 0) ) {
       Error("Can't connect to server: %s", mysql_error(&dbconn));
+      mysql_close(&dbconn);
       return false;
     }
   } else {
@@ -75,6 +74,7 @@ bool zmDbConnect() {
             staticConfig.DB_PASS.c_str(),
             nullptr, 0, dbPortOrSocket.c_str(), 0) ) {
         Error("Can't connect to server: %s", mysql_error(&dbconn));
+        mysql_close(&dbconn);
         return false;
       }
     } else {
@@ -87,12 +87,14 @@ bool zmDbConnect() {
             atoi(dbPortOrSocket.c_str()),
             nullptr, 0) ) {
         Error("Can't connect to server: %s", mysql_error(&dbconn));
+        mysql_close(&dbconn);
         return false;
       }
     }
   }
   if ( mysql_select_db(&dbconn, staticConfig.DB_NAME.c_str()) ) {
     Error("Can't select database: %s", mysql_error(&dbconn));
+    mysql_close(&dbconn);
     return false;
   }
   if ( mysql_query(&dbconn, "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED") ) {
@@ -103,13 +105,12 @@ bool zmDbConnect() {
 }
 
 void zmDbClose() {
-  if ( zmDbConnected ) {
+  if (zmDbConnected) {
     db_mutex.lock();
     mysql_close(&dbconn);
     // mysql_init() call implicitly mysql_library_init() but
     // mysql_close() does not call mysql_library_end()
-    // We get segfaults and a hang when we call this.  So just don't.
-    //mysql_library_end();
+    mysql_library_end();
     zmDbConnected = false;
     db_mutex.unlock();
   }
@@ -172,6 +173,37 @@ MYSQL_RES *zmDbRow::fetch(const char *query) {
     Debug(5, "Success");
   }
   return result_set;
+}
+
+int zmDbDo(const char *query) {
+  db_mutex.lock();
+  int rc;
+  while ( rc = mysql_query(&dbconn, query) ) {
+    db_mutex.unlock();
+    Error("Can't run query %s: %s", query, mysql_error(&dbconn));
+    if ( (mysql_errno(&dbconn) != ER_LOCK_WAIT_TIMEOUT) )
+      return rc;
+
+    db_mutex.lock();
+  }
+  db_mutex.unlock();
+  return 1;
+}
+
+int zmDbDoInsert(const char *query) {
+  db_mutex.lock();
+  int rc;
+  while ( rc = mysql_query(&dbconn, query) ) {
+    db_mutex.unlock();
+    Error("Can't run query %s: %s", query, mysql_error(&dbconn));
+    if ( (mysql_errno(&dbconn) != ER_LOCK_WAIT_TIMEOUT) )
+      return 0;
+
+    db_mutex.lock();
+  }
+  int id = mysql_insert_id(&dbconn);
+  db_mutex.unlock();
+  return id;
 }
 
 zmDbRow::~zmDbRow() {

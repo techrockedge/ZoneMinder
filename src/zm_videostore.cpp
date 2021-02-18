@@ -18,14 +18,10 @@
 // Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 //
 
-#define __STDC_FORMAT_MACROS 1
-
-
-#include "zm.h"
 #include "zm_videostore.h"
 
-#include <stdlib.h>
-#include <string.h>
+#include "zm_logger.h"
+#include "zm_monitor.h"
 
 extern "C" {
 #include "libavutil/time.h"
@@ -124,7 +120,9 @@ bool VideoStore::open() {
   out_format->flags |= AVFMT_TS_NONSTRICT; // allow non increasing dts
 
   if ( video_in_stream ) {
+#if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
     zm_dump_codecpar(video_in_stream->codecpar);
+#endif
     video_in_stream_index = video_in_stream->index;
 
     if ( monitor->GetOptVideoWriter() == Monitor::PASSTHROUGH ) {
@@ -140,7 +138,7 @@ bool VideoStore::open() {
         Error("Could not initialize ctx parameters");
         return false;
       }
-      fix_deprecated_pix_fmt(video_out_ctx);
+      video_out_ctx->pix_fmt = fix_deprecated_pix_fmt(video_out_ctx->pix_fmt);
       if ( oc->oformat->flags & AVFMT_GLOBALHEADER ) {
 #if LIBAVCODEC_VERSION_CHECK(56, 35, 0, 64, 0)
         video_out_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -166,7 +164,7 @@ bool VideoStore::open() {
       std::string wanted_encoder = monitor->Encoder();
 
       for ( unsigned int i = 0; i < sizeof(codec_data) / sizeof(*codec_data); i++ ) {
-        if ( wanted_encoder != "" ) {
+        if ( wanted_encoder != "" and wanted_encoder != "auto" ) {
           if ( wanted_encoder != codec_data[i].codec_name ) {
             Debug(1, "Not the right codec name %s != %s", codec_data[i].codec_name, wanted_encoder.c_str());
             continue;
@@ -212,10 +210,12 @@ bool VideoStore::open() {
           video_out_ctx->gop_size = 12;
           video_out_ctx->max_b_frames = 1;
 
-          ret = av_opt_set(video_out_ctx->priv_data, "crf", "36", AV_OPT_SEARCH_CHILDREN);
+          ret = av_opt_set(video_out_ctx, "crf", "36", AV_OPT_SEARCH_CHILDREN);
           if ( ret < 0 ) {
-            Error("Could not set 'crf' for output codec %s.",
-                codec_data[i].codec_name);
+            Error("Could not set 'crf' for output codec %s. %s",
+                codec_data[i].codec_name,
+                av_make_error_string(ret).c_str()
+                );
           }
         } else if ( video_out_ctx->codec_id == AV_CODEC_ID_MPEG2VIDEO ) {
           /* just for testing, we also add B frames */
@@ -262,7 +262,7 @@ bool VideoStore::open() {
         // We allocate and copy in newer ffmpeg, so need to free it
         avcodec_free_context(&video_out_ctx);
 #endif
-        video_out_ctx = nullptr;
+        //video_out_ctx = nullptr;
 
         return false;
       } // end if can't open codec
@@ -495,11 +495,15 @@ void VideoStore::flush_codecs() {
         CODEC_CAP_DELAY
 #endif
         ) ) {
-    while ( (ret = zm_send_frame_receive_packet(video_out_ctx, nullptr, pkt) ) > 0 ) {
     // Put encoder into flushing mode
+    while ( (ret = zm_send_frame_receive_packet(video_out_ctx, nullptr, pkt) ) > 0 ) {
+      av_packet_rescale_ts(&pkt,
+          video_out_ctx->time_base,
+          video_out_stream->time_base);
       write_packet(&pkt, video_out_stream);
       zm_av_packet_unref(&pkt);
     } // while have buffered frames
+    Debug(1, "Done writing buffered video.");
   } // end if have delay capability
 
   if ( audio_out_codec ) {
@@ -516,9 +520,7 @@ void VideoStore::flush_codecs() {
       if ( zm_add_samples_to_fifo(fifo, out_frame) ) {
         // Should probably set the frame size to what is reported FIXME
         if ( zm_get_samples_from_fifo(fifo, out_frame) ) {
-          if ( zm_send_frame_receive_packet(audio_out_ctx, out_frame, pkt) ) {
-            pkt.stream_index = audio_out_stream->index;
-
+          if ( zm_send_frame_receive_packet(audio_out_ctx, out_frame, pkt) > 0 ) {
             av_packet_rescale_ts(&pkt,
                 audio_out_ctx->time_base,
                 audio_out_stream->time_base);
@@ -528,7 +530,7 @@ void VideoStore::flush_codecs() {
         }  // end if data returned from fifo
       }
 
-    } // end if have buffered samples in the resampler
+    } // end while have buffered samples in the resampler
 
     Debug(2, "av_audio_fifo_size = %d", av_audio_fifo_size(fifo));
     while ( av_audio_fifo_size(fifo) > 0 ) {
@@ -558,14 +560,14 @@ void VideoStore::flush_codecs() {
 #endif
 
     while (1) {
-      if ( ! zm_receive_packet(audio_out_ctx, pkt) ) {
+      if ( 0 >= zm_receive_packet(audio_out_ctx, pkt) ) {
         Debug(1, "No more packets");
         break;
       }
 
-      dumpPacket(&pkt, "raw from encoder");
+      ZM_DUMP_PACKET(pkt, "raw from encoder");
       av_packet_rescale_ts(&pkt, audio_out_ctx->time_base, audio_out_stream->time_base);
-      dumpPacket(audio_out_stream, &pkt, "writing flushed packet");
+      ZM_DUMP_STREAM_PACKET(audio_out_stream, pkt, "writing flushed packet");
       write_packet(&pkt, audio_out_stream);
       zm_av_packet_unref(&pkt);
     }  // while have buffered frames
@@ -612,8 +614,6 @@ VideoStore::~VideoStore() {
 
     Debug(4, "Freeing video_out_ctx");
     avcodec_free_context(&video_out_ctx);
-    Debug(1, "Success freeing video_out_ctx %p", video_out_codec);
-    video_out_codec = nullptr;
   } // end if video_out_stream
 
   if ( audio_out_stream ) {
@@ -1043,7 +1043,7 @@ int VideoStore::writeVideoFramePacket(ZMPacket *zm_packet) {
       }
       return ret;
     }
-    dumpPacket(&opkt, "packet returned by codec");
+    ZM_DUMP_PACKET(opkt, "packet returned by codec");
 
     // Need to adjust pts/dts values from codec time to stream time
     if ( opkt.pts != AV_NOPTS_VALUE )
@@ -1123,7 +1123,7 @@ int VideoStore::writeVideoFramePacket(ZMPacket *zm_packet) {
 
     av_packet_rescale_ts(&opkt, video_in_stream->time_base, video_out_stream->time_base);
 
-    dumpPacket(video_out_stream, &opkt, "after pts adjustment");
+    ZM_DUMP_STREAM_PACKET(video_out_stream, opkt, "after pts adjustment");
   } // end if codec matches
 
   write_packet(&opkt, video_out_stream);
@@ -1142,7 +1142,7 @@ int VideoStore::writeAudioFramePacket(ZMPacket *zm_packet) {
     return 0;
     // FIXME -ve return codes do not free packet in ffmpeg_camera at the moment
   }
-  dumpPacket(audio_in_stream, ipkt, "input packet");
+  ZM_DUMP_STREAM_PACKET(audio_in_stream, (*ipkt), "input packet");
 
   if ( !audio_first_dts ) {
     audio_first_dts = ipkt->dts;
@@ -1152,7 +1152,7 @@ int VideoStore::writeAudioFramePacket(ZMPacket *zm_packet) {
   // Need to adjust pts before feeding to decoder.... should really copy the pkt instead of modifying it
   ipkt->pts -= audio_first_dts;
   ipkt->dts -= audio_first_dts;
-  dumpPacket(audio_in_stream, ipkt, "after pts adjustment");
+  ZM_DUMP_STREAM_PACKET(audio_in_stream, (*ipkt), "after pts adjustment");
 
   if ( audio_out_codec ) {
     // I wonder if we can get multiple frames per packet? Probably
@@ -1209,7 +1209,7 @@ int VideoStore::writeAudioFramePacket(ZMPacket *zm_packet) {
     opkt.pts = ipkt->pts;
     opkt.dts = ipkt->dts;
     av_packet_rescale_ts(&opkt, audio_in_stream->time_base, audio_out_stream->time_base);
-    dumpPacket(audio_out_stream, &opkt, "after stream pts adjustment");
+    ZM_DUMP_STREAM_PACKET(audio_out_stream, opkt, "after stream pts adjustment");
     write_packet(&opkt, audio_out_stream);
 
     zm_av_packet_unref(&opkt);
@@ -1251,7 +1251,7 @@ int VideoStore::write_packet(AVPacket *pkt, AVStream *stream) {
   } else if ( pkt->dts < stream->cur_dts ) {
     Debug(1, "non increasing dts, fixing. our dts %" PRId64 " stream cur_dts %" PRId64, pkt->dts, stream->cur_dts);
     pkt->dts = stream->cur_dts;
-  } 
+  }
 
   if ( pkt->dts > pkt->pts ) {
     Debug(1,
@@ -1261,9 +1261,10 @@ int VideoStore::write_packet(AVPacket *pkt, AVStream *stream) {
     pkt->pts = pkt->dts;
   }
 
-  dumpPacket(stream, pkt, "finished pkt");
-  next_dts[stream->index] = opkt.dts + opkt.duration;
-  Debug(3, "video_next_dts has become %" PRId64, next_dts[stream->index]);
+  ZM_DUMP_STREAM_PACKET(stream, (*pkt), "finished pkt");
+  next_dts[stream->index] = pkt->dts + pkt->duration;
+  Debug(3, "next_dts for stream %d has become %" PRId64,
+      stream->index, next_dts[stream->index]);
 
   int ret = av_interleaved_write_frame(oc, pkt);
   if ( ret != 0 ) {

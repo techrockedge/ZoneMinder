@@ -17,18 +17,14 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include <string>
-
 #include "zm.h"
 #include "zm_db.h"
 #include "zm_user.h"
 #include "zm_signal.h"
-#include "zm_monitor.h"
 #include "zm_monitorstream.h"
 #include "zm_eventstream.h"
 #include "zm_fifo.h"
+#include <string>
 
 bool ValidateAccess(User *user, int mon_id) {
   bool allowed = true;
@@ -85,9 +81,12 @@ int main(int argc, const char *argv[], char **envp) {
     nph = true;
   }
 
-  zmLoadConfig();
   char log_id_string[32] = "zms";
   logInit(log_id_string);
+  zmLoadStaticConfig();
+  zmDbConnect();
+  zmLoadDBConfig();
+
   for (char **env = envp; *env != 0; env++) {
     char *thisEnv = *env;
     Debug(1, "env: %s", thisEnv);

@@ -9,28 +9,27 @@
 **
 ** -------------------------------------------------------------------------*/
 
+#ifndef ZM_RTSP_H264_DEVICE_SOURCE_H
+#define ZM_RTSP_H264_DEVICE_SOURCE_H
 
-#ifndef H264_ZoneMinder_DEVICE_SOURCE
-#define H264_ZoneMinder_DEVICE_SOURCE
-
+#include "zm_config.h"
 #include "zm_rtsp_server_device_source.h"
-#include "zm_rtsp_server_frame.h"
 
 // ---------------------------------
 // H264 ZoneMinder FramedSource
 // ---------------------------------
-
+#if HAVE_RTSP_SERVER
 class H26X_ZoneMinderDeviceSource : public ZoneMinderDeviceSource {
 	protected:
 		H26X_ZoneMinderDeviceSource(
         UsageEnvironment& env,
-        Monitor *monitor,
+        std::shared_ptr<Monitor> monitor,
         AVStream *stream,
         unsigned int queueSize,
         bool repeatConfig,
         bool keepMarker)
 			:
-        ZoneMinderDeviceSource(env, monitor, stream, queueSize),
+        ZoneMinderDeviceSource(env, std::move(monitor), stream, queueSize),
         m_repeatConfig(repeatConfig),
         m_keepMarker(keepMarker),
         m_frameType(0) { }
@@ -52,18 +51,18 @@ class H264_ZoneMinderDeviceSource : public H26X_ZoneMinderDeviceSource {
 	public:
 		static H264_ZoneMinderDeviceSource* createNew(
 				UsageEnvironment& env,
-				Monitor *monitor,
+				std::shared_ptr<Monitor> monitor,
 				AVStream *stream,
 				unsigned int queueSize,
 				bool repeatConfig,
 				bool keepMarker) {
-			return new H264_ZoneMinderDeviceSource(env, monitor, stream, queueSize, repeatConfig, keepMarker);
+			return new H264_ZoneMinderDeviceSource(env, std::move(monitor), stream, queueSize, repeatConfig, keepMarker);
 		}
 
 	protected:
 		H264_ZoneMinderDeviceSource(
         UsageEnvironment& env,
-        Monitor *monitor,
+        std::shared_ptr<Monitor> monitor,
         AVStream *stream,
         unsigned int queueSize,
         bool repeatConfig,
@@ -77,18 +76,18 @@ class H265_ZoneMinderDeviceSource : public H26X_ZoneMinderDeviceSource {
 	public:
 		static H265_ZoneMinderDeviceSource* createNew(
         UsageEnvironment& env,
-        Monitor *monitor,
+        std::shared_ptr<Monitor> monitor,
         AVStream *stream,
         unsigned int queueSize,
         bool repeatConfig,
         bool keepMarker) {
-			return new H265_ZoneMinderDeviceSource(env, monitor, stream, queueSize, repeatConfig, keepMarker);
+			return new H265_ZoneMinderDeviceSource(env, std::move(monitor), stream, queueSize, repeatConfig, keepMarker);
 		}
 
 	protected:
 		H265_ZoneMinderDeviceSource(
         UsageEnvironment& env,
-        Monitor *monitor,
+        std::shared_ptr<Monitor> monitor,
         AVStream *stream,
         unsigned int queueSize,
         bool repeatConfig,
@@ -100,4 +99,6 @@ class H265_ZoneMinderDeviceSource : public H26X_ZoneMinderDeviceSource {
 	protected:
 		std::string m_vps;
 };
-#endif
+#endif // HAVE_RTSP_SERVER
+
+#endif // ZM_RTSP_H264_DEVICE_SOURCE_H

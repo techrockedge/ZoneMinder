@@ -20,30 +20,18 @@
 #ifndef ZM_MONITOR_H
 #define ZM_MONITOR_H
 
-#include <vector>
-#include <sstream>
-#include <thread>
-
-#include "zm.h"
-#include "zm_coord.h"
-#include "zm_image.h"
-#include "zm_rgb.h"
-#include "zm_zone.h"
-#include "zm_event.h"
-#include "zm_video.h"
-#include "zm_videostore.h"
-#include "zm_packetqueue.h"
-#include "zm_thread.h"
-
-class Monitor;
-#include "zm_group.h"
+#include "zm_define.h"
 #include "zm_camera.h"
-#include "zm_storage.h"
-#include "zm_utils.h"
-
-#include "zm_image_analyser.h"
-
+#include "zm_event.h"
+#include "zm_image.h"
+#include "zm_packet.h"
+#include "zm_packetqueue.h"
+#include "zm_video.h"
+#include <memory>
 #include <sys/time.h>
+#include <vector>
+
+class Group;
 
 #define SIGNAL_CAUSE "Signal"
 #define MOTION_CAUSE "Motion"
@@ -117,8 +105,8 @@ protected:
   /* sizeof(SharedData) expected to be 344 bytes on 32bit and 64bit */
   typedef struct {
     uint32_t size;              /* +0    */
-    uint32_t last_write_index;  /* +4    */
-    uint32_t last_read_index;   /* +8    */
+    int32_t last_write_index;  /* +4    */
+    int32_t last_read_index;   /* +8    */
     uint32_t state;             /* +12   */
     double      capture_fps;       // Current capturing fps
     double      analysis_fps;      // Current analysis fps
@@ -298,7 +286,7 @@ protected:
   char       label_format[64];    // The format of the timestamp on the images
   Coord      label_coord;      // The coordinates of the timestamp on the images
   int        label_size;         // Size of the timestamp on the images
-  int        image_buffer_count;   // Size of circular image buffer, at least twice the size of the pre_event_count
+  int32_t   image_buffer_count;   // Size of circular image buffer, at least twice the size of the pre_event_count
   int        pre_event_buffer_count;   // Size of dedicated circular pre event buffer used when analysis is not performed at capturing framerate,
   // value is pre_event_count + alarm_frame_count - 1
   int        warmup_count;      // How many images to process before looking for events
@@ -331,8 +319,10 @@ protected:
 
   int        event_count;
   int        image_count;
+  int         last_capture_image_count; // last value of image_count when calculating capture fps
   int        analysis_image_count;    // How many frames have been processed by analysis thread.
   int        motion_frame_count;      // How many frames have had motion detection performed on them.
+  int         last_motion_frame_count; // last value of motion_frame_count when calculating fps
   int        ready_count;
   int        first_alarm_count;
   int        last_alarm_count;
@@ -368,14 +358,15 @@ protected:
   int video_stream_id; // will be filled in PrimeCapture
   int audio_stream_id; // will be filled in PrimeCapture
 
-  Camera      *camera;
+  std::unique_ptr<Camera> camera;
   Event       *event;
+  std::mutex   event_mutex;
   Storage     *storage;
 
   VideoStore          *videoStore;
   PacketQueue      packetqueue;
   packetqueue_iterator  *analysis_it;
-  Mutex mutex;
+
 
   int      n_zones;
   Zone      **zones;
@@ -403,13 +394,14 @@ public:
   void AddZones( int p_n_zones, Zone *p_zones[] );
   void AddPrivacyBitmask( Zone *p_zones[] );
 
+  void LoadCamera();
   bool connect();
   bool disconnect();
 
   inline int ShmValid() const {
     return shared_data && shared_data->valid;
   }
-  Camera *getCamera();
+
 
   inline unsigned int Id() const { return id; }
   inline const char *Name() const { return name; }
@@ -478,9 +470,15 @@ public:
   void SetVideoWriterStartTime(const struct timeval &t) { video_store_data->recording = t; }
  
   unsigned int GetPreEventCount() const { return pre_event_count; };
-  int GetImageBufferCount() const { return image_buffer_count; };
-  State GetState() const;
-  int GetImage( int index=-1, int scale=100 );
+  int32_t GetImageBufferCount() const { return image_buffer_count; };
+  State GetState() const { return (State)shared_data->state; }
+
+  AVStream *GetAudioStream() const { return camera ? camera->get_AudioStream() : nullptr; };
+  AVCodecContext *GetAudioCodecContext() const { return camera ?  camera->get_AudioCodecContext() : nullptr; };
+  AVStream *GetVideoStream() const { return camera ? camera->get_VideoStream() : nullptr; };
+  AVCodecContext *GetVideoCodecContext() const { return camera ?  camera->get_VideoCodecContext() : nullptr; };
+
+  int GetImage(int32_t index=-1, int scale=100);
   ZMPacket *getSnapshot( int index=-1 ) const;
   struct timeval GetTimestamp( int index=-1 ) const;
   void UpdateAdaptiveSkip();
@@ -542,16 +540,16 @@ public:
   std::vector<Group *>  Groups();
   StringVector GroupNames();
 
-  static int LoadMonitors(std::string sql, Monitor **&monitors, Purpose purpose);  // Returns # of Monitors loaded, 0 on failure.
+  static std::vector<std::shared_ptr<Monitor>> LoadMonitors(std::string sql, Purpose purpose);  // Returns # of Monitors loaded, 0 on failure.
 #if ZM_HAS_V4L
-  static int LoadLocalMonitors(const char *device, Monitor **&monitors, Purpose purpose);
+  static std::vector<std::shared_ptr<Monitor>> LoadLocalMonitors(const char *device, Purpose purpose);
 #endif // ZM_HAS_V4L
-  static int LoadRemoteMonitors(const char *protocol, const char *host, const char*port, const char*path, Monitor **&monitors, Purpose purpose);
-  static int LoadFileMonitors(const char *file, Monitor **&monitors, Purpose purpose);
+  static std::vector<std::shared_ptr<Monitor>> LoadRemoteMonitors(const char *protocol, const char *host, const char*port, const char*path, Purpose purpose);
+  static std::vector<std::shared_ptr<Monitor>> LoadFileMonitors(const char *file, Purpose purpose);
 #if HAVE_LIBAVFORMAT
-  static int LoadFfmpegMonitors(const char *file, Monitor **&monitors, Purpose purpose);
+  static std::vector<std::shared_ptr<Monitor>> LoadFfmpegMonitors(const char *file, Purpose purpose);
 #endif // HAVE_LIBAVFORMAT
-  static Monitor *Load(unsigned int id, bool load_zones, Purpose purpose);
+  static std::shared_ptr<Monitor> Load(unsigned int id, bool load_zones, Purpose purpose);
   void Load(MYSQL_ROW dbrow, bool load_zones, Purpose purpose);
   //void writeStreamImage( Image *image, struct timeval *timestamp, int scale, int mag, int x, int y );
   //void StreamImages( int scale=100, int maxfps=10, time_t ttl=0, int msq_id=0 );

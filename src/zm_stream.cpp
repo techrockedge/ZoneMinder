@@ -17,17 +17,14 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 
-#include <sys/un.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/file.h>
-
-#include "zm.h"
-#include "zm_mpeg.h"
-#include "zm_monitor.h"
-
 #include "zm_stream.h"
+
+#include "zm_box.h"
+#include "zm_monitor.h"
+#include <sys/file.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <cmath>
 
 StreamBase::~StreamBase() {
 #if HAVE_LIBAVCODEC
@@ -37,16 +34,10 @@ StreamBase::~StreamBase() {
   }
 #endif
   closeComms();
-  if ( monitor ) {
-    delete monitor;
-    monitor = nullptr;
-  }
 }
 
 bool StreamBase::loadMonitor(int p_monitor_id) {
   monitor_id = p_monitor_id;
-  if ( monitor )
-    delete monitor;
 
   if ( !(monitor = Monitor::Load(monitor_id, false, Monitor::QUERY)) ) {
     Error("Unable to load monitor id %d for streaming", monitor_id);
@@ -84,7 +75,7 @@ bool StreamBase::checkInitialised() {
 
 void StreamBase::updateFrameRate(double fps) {
   frame_mod = 1;
-  if ( (fps < 0) || !fps || isinf(fps) ) {
+  if ( (fps < 0) || !fps || std::isinf(fps) ) {
     Debug(1, "Zero or negative fps %f in updateFrameRate. Setting frame_mod=1 and effective_fps=0.0", fps);
     effective_fps = 0.0;
     base_fps = 0.0;

@@ -17,18 +17,16 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 //
-#include <arpa/inet.h>
-
-#include "zm.h"
-#include "zm_db.h"
-#include "zm_time.h"
-#include "zm_mpeg.h"
-#include "zm_event.h"
 #include "zm_eventstream.h"
-#include "zm_storage.h"
-#include "zm_monitor.h"
 
+#include "zm_db.h"
+#include "zm_image.h"
+#include "zm_logger.h"
 #include "zm_sendfile.h"
+#include "zm_signal.h"
+#include "zm_storage.h"
+#include <arpa/inet.h>
+#include <sys/stat.h>
 
 const std::string EventStream::StreamMode_Strings[4] = {
   "None",
@@ -117,7 +115,7 @@ bool EventStream::loadEventData(uint64_t event_id) {
   snprintf(sql, sizeof(sql),
       "SELECT `MonitorId`, `StorageId`, `Frames`, unix_timestamp( `StartDateTime` ) AS StartTimestamp, "
       "unix_timestamp( `EndDateTime` ) AS EndTimestamp, "
-      "(SELECT max(`Delta`)-min(`Delta`) FROM `Frames` WHERE `EventId`=`Events`.`Id`) AS Duration, "
+      "(SELECT max(`Delta`)-min(`Delta`) FROM `Frames` WHERE `EventId`=`Events`.`Id`) AS FramesDuration, "
       "`DefaultVideo`, `Scheme`, `SaveJPEGs`, `Orientation`+0 FROM `Events` WHERE `Id` = %" PRIu64, event_id);
 
   if ( mysql_query(&dbconn, sql) ) {
@@ -151,7 +149,8 @@ bool EventStream::loadEventData(uint64_t event_id) {
   event_data->frame_count = dbrow[2] == nullptr ? 0 : atoi(dbrow[2]);
   event_data->start_time = atoi(dbrow[3]);
   event_data->end_time = dbrow[4] ? atoi(dbrow[4]) : 0;
-  event_data->duration = dbrow[5] ? atof(dbrow[5]) : 0.0;
+  event_data->duration = event_data->end_time - event_data->start_time;
+  event_data->frames_duration = dbrow[5] ? atof(dbrow[5]) : 0.0;
   strncpy(event_data->video_file, dbrow[6], sizeof(event_data->video_file)-1);
   std::string scheme_str = std::string(dbrow[7]);
   if ( scheme_str == "Deep" ) {
@@ -168,7 +167,6 @@ bool EventStream::loadEventData(uint64_t event_id) {
   if ( !monitor ) {
     monitor = Monitor::Load(event_data->monitor_id, false, Monitor::QUERY);
   } else if ( monitor->Id() != event_data->monitor_id ) {
-    delete monitor;
     monitor = Monitor::Load(event_data->monitor_id, false, Monitor::QUERY);
   }
   if ( !monitor ) {
@@ -316,8 +314,8 @@ bool EventStream::loadEventData(uint64_t event_id) {
     else
       curr_stream_time = event_data->frames[event_data->last_frame_id-1].timestamp;
   }
-  Debug(2, "Event:%" PRIu64 ", Frames:%ld, Last Frame ID(%ld, Duration: %.2f",
-      event_data->event_id, event_data->frame_count, event_data->last_frame_id, event_data->duration);
+  Debug(2, "Event:%" PRIu64 ", Frames:%ld, Last Frame ID(%ld, Duration: %.2f Frames Duration: %.2f",
+      event_data->event_id, event_data->frame_count, event_data->last_frame_id, event_data->duration, event_data->frames_duration);
 
   return true;
 } // bool EventStream::loadEventData( int event_id )
@@ -949,7 +947,7 @@ void EventStream::runStream() {
       delta_us = (unsigned int)((delta_us * base_fps)/effective_fps);
       Debug(3, "delta %u = base_fps(%f)/effective fps(%f)", delta_us, base_fps, effective_fps);
       // but must not exceed maxfps
-      delta_us = max(delta_us, 1000000/maxfps);
+      delta_us = std::max(delta_us, int(1000000/maxfps));
       Debug(3, "delta %u = base_fps(%f)/effective fps(%f) from 30fps", delta_us, base_fps, effective_fps);
 
       // +/- 1? What if we are skipping frames?

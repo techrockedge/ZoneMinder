@@ -9,17 +9,13 @@
 **
 ** -------------------------------------------------------------------------*/
 
-#include "zm.h"
+#ifndef ZM_RTSP_SERVER_ADTS_SOURCE_H
+#define ZM_RTSP_SERVER_ADTS_SOURCE_H
+
+#include "zm_config.h"
+#include "zm_rtsp_server_device_source.h"
 
 #if HAVE_RTSP_SERVER
-
-#ifndef ADTS_ZoneMinder_DEVICE_SOURCE
-#define ADTS_ZoneMinder_DEVICE_SOURCE
-
-// project
-#include "zm_rtsp_server_device_source.h"
-#include "zm_rtsp_server_frame.h"
-
 // ---------------------------------
 // ADTS(AAC) ZoneMinder FramedSource
 // ---------------------------------
@@ -28,18 +24,18 @@ class ADTS_ZoneMinderDeviceSource : public ZoneMinderDeviceSource {
   public:
 		static ADTS_ZoneMinderDeviceSource* createNew(
         UsageEnvironment& env,
-        Monitor* monitor,
+        std::shared_ptr<Monitor> monitor,
         AVStream * stream,
         unsigned int queueSize
         ) {
       Debug(1, "m_stream %p codecpar %p channels %d", 
           stream, stream->codecpar, stream->codecpar->channels);
-			return new ADTS_ZoneMinderDeviceSource(env, monitor, stream, queueSize);
+			return new ADTS_ZoneMinderDeviceSource(env, std::move(monitor), stream, queueSize);
     };
 	protected:
 		ADTS_ZoneMinderDeviceSource(
         UsageEnvironment& env,
-        Monitor *monitor,
+        std::shared_ptr<Monitor> monitor,
         AVStream *stream,
         unsigned int queueSize
         );
@@ -67,5 +63,6 @@ class ADTS_ZoneMinderDeviceSource : public ZoneMinderDeviceSource {
     int samplingFrequencyIndex;
     int channels;
 };
-#endif
-#endif
+#endif // HAVE_RTSP_SERVER
+
+#endif // ZM_RTSP_SERVER_ADTS_SOURCE_H

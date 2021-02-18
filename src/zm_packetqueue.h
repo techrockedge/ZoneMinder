@@ -16,19 +16,15 @@
 //You should have received a copy of the GNU General Public License
 //along with ZoneMinder.  If not, see <http://www.gnu.org/licenses/>.
 
-
 #ifndef ZM_PACKETQUEUE_H
 #define ZM_PACKETQUEUE_H
 
-#include <list>
-#include "zm_packet.h"
-#include "zm_thread.h"
-#include <mutex>
 #include <condition_variable>
+#include <list>
+#include <mutex>
 
-extern "C" {
-#include <libavformat/avformat.h>
-}
+class ZMPacket;
+
 typedef std::list<ZMPacket *>::iterator packetqueue_iterator;
 
 class PacketQueue {
@@ -53,12 +49,7 @@ class PacketQueue {
     std::list<ZMPacket *>::const_iterator begin() const { return pktQueue.begin(); }
 
     void addStreamId(int p_stream_id);
-    void setMaxVideoPackets(int p) {
-      max_video_packet_count = p;
-      if ( max_video_packet_count < 1 )
-        max_video_packet_count = 1 ;
-      // We can simplify a lot of logic in queuePacket if we can assume at least 1 packet in queue
-    }
+    void setMaxVideoPackets(int p);
 
     bool queuePacket(ZMPacket* packet);
     ZMPacket * popPacket();

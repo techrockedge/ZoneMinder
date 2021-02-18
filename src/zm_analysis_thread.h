@@ -1,29 +1,26 @@
 #ifndef ZM_ANALYSIS_THREAD_H
 #define ZM_ANALYSIS_THREAD_H
 
-#include "zm_thread.h"
-#include <signal.h>
-
 #include "zm_monitor.h"
+#include <atomic>
+#include <memory>
+#include <thread>
 
-class AnalysisThread : public Thread {
-  private:
-    bool terminate;
-    sigset_t block_set;
-    Monitor *monitor;
+class AnalysisThread {
+ public:
+  explicit AnalysisThread(std::shared_ptr<Monitor> monitor);
+  ~AnalysisThread();
+  AnalysisThread(AnalysisThread &rhs) = delete;
+  AnalysisThread(AnalysisThread &&rhs) = delete;
 
-  public:
-    explicit AnalysisThread(Monitor *);
-    ~AnalysisThread();
-    int run();
+  void Stop() { terminate_ = true; }
 
-    void stop() {
-      terminate = true;
-    }
-    bool stopped() const {
-      return terminate;
-    }
+ private:
+  void Run();
 
+  std::shared_ptr<Monitor> monitor_;
+  std::atomic<bool> terminate_;
+  std::thread thread_;
 };
 
 #endif

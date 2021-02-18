@@ -20,25 +20,20 @@
 #ifndef ZM_IMAGE_H
 #define ZM_IMAGE_H
 
-#include "zm.h"
-extern "C" {
-#include "zm_jpeg.h"
-}
-#include "zm_rgb.h"
 #include "zm_coord.h"
-#include "zm_box.h"
-#include "zm_poly.h"
-#include "zm_mem_utils.h"
-#include "zm_utils.h"
-
-class Image;
 #include "zm_ffmpeg.h"
-
-#include <errno.h>
+#include "zm_jpeg.h"
+#include "zm_logger.h"
+#include "zm_mem_utils.h"
+#include "zm_rgb.h"
 
 #if HAVE_ZLIB_H
 #include <zlib.h>
 #endif // HAVE_ZLIB_H
+
+class Box;
+class Image;
+class Polygon;
 
 #define ZM_BUFTYPE_DONTFREE 0
 #define ZM_BUFTYPE_MALLOC 1 
@@ -99,27 +94,25 @@ class Image {
     blend_fptr_t blend;
 
     void update_function_pointers();
+
 protected:
+    struct Edge {
+      int min_y;
+      int max_y;
+      double min_x;
+      double _1_m;
 
-	struct Edge {
-		int min_y;
-		int max_y;
-		double min_x;
-		double _1_m;
+      static bool CompareYX(const Edge &e1, const Edge &e2) {
+        if ( e1.min_y == e2.min_y )
+          return e1.min_x < e2.min_x;
+        else
+          return e1.min_y < e2.min_y;
+      }
 
-		static int CompareYX( const void *p1, const void *p2 ) {
-      // This is because these functions are passed to qsort
-			const Edge *e1 = reinterpret_cast<const Edge *>(p1), *e2 = reinterpret_cast<const Edge *>(p2);
-			if ( e1->min_y == e2->min_y )
-				return( int(e1->min_x - e2->min_x) );
-			else
-				return( int(e1->min_y - e2->min_y) );
-		}
-		static int CompareX( const void *p1, const void *p2 ) {
-			const Edge *e1 = reinterpret_cast<const Edge *>(p1), *e2 = reinterpret_cast<const Edge *>(p2);
-			return( int(e1->min_x - e2->min_x) );
-		}
-	};
+      static bool CompareX(const Edge &e1, const Edge &e2) {
+        return e1.min_x < e2.min_x;
+      }
+    };
 	
 	inline void DumpImgBuffer() {
 		DumpBuffer(buffer, buffertype);

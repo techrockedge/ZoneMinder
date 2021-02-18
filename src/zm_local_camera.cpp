@@ -17,20 +17,15 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 
 
-#include "zm.h"
-
-#if ZM_HAS_V4L
-
 #include "zm_local_camera.h"
 
-#include <sys/types.h>
-#include <sys/stat.h>
+#include "zm_packet.h"
+#include "zm_utils.h"
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/mman.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <limits.h>
+#include <sys/stat.h>
+
+#if ZM_HAS_V4L
 
 /* Workaround for GNU/kFreeBSD and FreeBSD */
 #if defined(__FreeBSD_kernel__) || defined(__FreeBSD__)
@@ -307,7 +302,7 @@ AVFrame **LocalCamera::capturePictures = nullptr;
 LocalCamera *LocalCamera::last_camera = nullptr;
 
 LocalCamera::LocalCamera(
-  int p_id,
+  const Monitor *monitor,
   const std::string &p_device,
   int p_channel,
   int p_standard,
@@ -323,15 +318,15 @@ LocalCamera::LocalCamera(
   int p_hue,
   int p_colour,
   bool p_capture,
-	bool p_record_audio,
+  bool p_record_audio,
   unsigned int p_extras) :
-    Camera( p_id, LOCAL_SRC, p_width, p_height, p_colours, ZM_SUBPIX_ORDER_DEFAULT_FOR_COLOUR(p_colours), p_brightness, p_contrast, p_hue, p_colour, p_capture, p_record_audio ),
-  device( p_device ),
-  channel( p_channel ),
-  standard( p_standard ),
-  palette( p_palette ),
-  channel_index( 0 ),
-  extras ( p_extras )
+    Camera(monitor, LOCAL_SRC, p_width, p_height, p_colours, ZM_SUBPIX_ORDER_DEFAULT_FOR_COLOUR(p_colours), p_brightness, p_contrast, p_hue, p_colour, p_capture, p_record_audio),
+  device(p_device),
+  channel(p_channel),
+  standard(p_standard),
+  palette(p_palette),
+  channel_index(0),
+  extras(p_extras)
 {
   // If we are the first, or only, input on this device then
   // do the initial opening etc
@@ -342,7 +337,7 @@ LocalCamera::LocalCamera(
 
   if ( capture ) {
     if ( device_prime ) {
-      Debug( 2, "V4L support enabled, using V4L%d api", v4l_version );
+      Debug(2, "V4L support enabled, using V4L%d api", v4l_version);
     }
 
     if ( !last_camera || channel != last_camera->channel ) {
@@ -361,10 +356,10 @@ LocalCamera::LocalCamera(
   uint32_t checkval = 0xAABBCCDD;
   if ( *(unsigned char*)&checkval == 0xDD ) {
     BigEndian = 0;
-    Debug(2,"little-endian processor detected");
+    Debug(2, "little-endian processor detected");
   } else if ( *(unsigned char*)&checkval == 0xAA ) {
     BigEndian = 1;
-    Debug(2,"Big-endian processor detected");
+    Debug(2, "Big-endian processor detected");
   } else {
     Error("Unable to detect the processor's endianness. Assuming little-endian.");
     BigEndian = 0;
@@ -681,9 +676,6 @@ LocalCamera::LocalCamera(
     imgConversionContext = nullptr;
   } // end if capture and conversion_tye == swscale
 #endif
-    mVideoStreamId = 0;
-    mAudioStreamId = -1;
-    mVideoStream = nullptr;
 } // end LocalCamera::LocalCamera
 
 LocalCamera::~LocalCamera() {
@@ -952,12 +944,12 @@ void LocalCamera::Initialise() {
     }
 
     if ( (input.std != V4L2_STD_UNKNOWN) && ((input.std & standard) == V4L2_STD_UNKNOWN) ) {
-      Fatal("Device does not support video standard %d", standard);
+      Error("Device does not support video standard %d", standard);
     }
 
     stdId = standard;
-    if ( (input.std != V4L2_STD_UNKNOWN) && (vidioctl(vid_fd, VIDIOC_S_STD, &stdId) < 0) )   {
-      Fatal("Failed to set video standard %d: %d %s", standard, errno, strerror(errno));
+    if ((vidioctl(vid_fd, VIDIOC_S_STD, &stdId) < 0)) {
+      Error("Failed to set video standard %d: %d %s", standard, errno, strerror(errno));
     }
 
     Contrast(contrast);
@@ -2180,6 +2172,7 @@ int LocalCamera::Capture(ZMPacket &zm_packet) {
     zm_packet.image->Assign(width, height, colours, subpixelorder, buffer, imagesize);
   } // end if doing conversion or not
 
+  zm_packet.packet.stream_index = mVideoStreamId;
   zm_packet.codec_type = AVMEDIA_TYPE_VIDEO;
   zm_packet.keyframe = 1;
   return 1;
@@ -2202,7 +2195,6 @@ int LocalCamera::PostCapture() {
         v4l2_std_id stdId = standards[next_channel];
         if ( vidioctl(vid_fd, VIDIOC_S_STD, &stdId) < 0 ) {
           Error("Failed to set video format %d: %s", standards[next_channel], strerror(errno));
-          return -1;
         }
       }
       if ( v4l2_data.bufptr ) {

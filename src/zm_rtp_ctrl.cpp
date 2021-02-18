@@ -15,18 +15,15 @@
 // You should have received a copy of the GNU General Public License
 // along with this program; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
-// 
-
-#include "zm.h"
-
-#if HAVE_LIBAVFORMAT
+//
 
 #include "zm_rtp_ctrl.h"
 
-#include "zm_time.h"
+#include "zm_config.h"
+#include "zm_rtp.h"
 #include "zm_rtsp.h"
 
-#include <errno.h>
+#if HAVE_LIBAVFORMAT
 
 RtpCtrlThread::RtpCtrlThread( RtspThread &rtspThread, RtpSource &rtpSource )
   : mRtspThread( rtspThread ), mRtpSource( rtpSource ), mStop( false )
@@ -246,10 +243,10 @@ int RtpCtrlThread::recvPackets( unsigned char *buffer, ssize_t nBytes ) {
 
 int RtpCtrlThread::run() {
   Debug( 2, "Starting control thread %x on port %d", mRtpSource.getSsrc(), mRtpSource.getLocalCtrlPort() );
-  SockAddrInet localAddr, remoteAddr;
+  ZM::SockAddrInet localAddr, remoteAddr;
 
   bool sendReports;
-  UdpInetSocket rtpCtrlServer;
+  ZM::UdpInetSocket rtpCtrlServer;
   if ( mRtpSource.getLocalHost() != "" ) {
     if ( !rtpCtrlServer.bind( mRtpSource.getLocalHost().c_str(), mRtpSource.getLocalCtrlPort() ) )
       Fatal( "Failed to bind RTCP server" );
@@ -267,7 +264,7 @@ int RtpCtrlThread::run() {
 
   // The only reason I can think of why we would have a timeout period is so that we can regularly send RR packets.
   // Why 10 seconds? If anything I think this should be whatever timeout value was given in the DESCRIBE response
-  Select select( 10 );
+  ZM::Select select( 10 );
   select.addReader( &rtpCtrlServer );
 
   unsigned char buffer[ZM_NETWORK_BUFSIZ];
@@ -278,7 +275,7 @@ int RtpCtrlThread::run() {
   while ( !mStop && select.wait() >= 0 ) {
 
     time_t now = time(nullptr);
-    Select::CommsList readable = select.getReadable();
+    ZM::Select::CommsList readable = select.getReadable();
     if ( readable.size() == 0 ) {
       if ( ! timeout ) {
         // With this code here, we will send an SDES and RR packet every 10 seconds
@@ -302,8 +299,8 @@ int RtpCtrlThread::run() {
       timeout = false;
       last_receive = time(nullptr);
     }
-    for ( Select::CommsList::iterator iter = readable.begin(); iter != readable.end(); ++iter ) {
-      if ( UdpInetSocket *socket = dynamic_cast<UdpInetSocket *>(*iter) ) {
+    for ( ZM::Select::CommsList::iterator iter = readable.begin(); iter != readable.end(); ++iter ) {
+      if ( ZM::UdpInetSocket *socket = dynamic_cast<ZM::UdpInetSocket *>(*iter) ) {
         ssize_t nBytes = socket->recv( buffer, sizeof(buffer) );
         Debug( 4, "Read %zd bytes on sd %d", nBytes, socket->getReadDesc() );
 

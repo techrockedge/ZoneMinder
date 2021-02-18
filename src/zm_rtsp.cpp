@@ -17,20 +17,16 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 
 
-#include "zm.h"
-
-#if HAVE_LIBAVFORMAT
-
 #include "zm_rtsp.h"
 
+#include "zm_config.h"
 #include "zm_rtp_data.h"
 #include "zm_rtp_ctrl.h"
 #include "zm_db.h"
 
-#include <sys/time.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <errno.h>
+#include <algorithm>
+
+#if HAVE_LIBAVFORMAT
 
 int RtspThread::smMinDataPort = 0;
 int RtspThread::smMaxDataPort = 0;
@@ -74,7 +70,7 @@ bool RtspThread::recvResponse(std::string &response) {
     } else {
       Error("Response parse failure, %zd bytes follow", response.size());
       if ( response.size() )
-        Hexdump(Logger::ERROR, response.data(), min(response.size(),16));
+        Hexdump(Logger::ERROR, response.data(), std::min(int(response.size()), 16));
     }
     return false;
   }
@@ -266,7 +262,7 @@ int RtspThread::run() {
         } else {
           Error("Response parse failure, %zd bytes follow", response.size());
           if ( response.size() )
-            Hexdump(Logger::ERROR, response.data(), min(response.size(),16));
+            Hexdump(Logger::ERROR, response.data(), std::min(int(response.size()), 16));
         }
         return -1;
       }
@@ -403,7 +399,9 @@ int RtspThread::run() {
   if ( mFormatContext->nb_streams >= 1 ) {
     for ( unsigned int i = 0; i < mFormatContext->nb_streams; i++ ) {
       SessionDescriptor::MediaDescriptor *mediaDesc = mSessDesc->getStream(i);
-#if (LIBAVCODEC_VERSION_CHECK(52, 64, 0, 64, 0) || LIBAVUTIL_VERSION_CHECK(50, 14, 0, 14, 0))
+#if LIBAVFORMAT_VERSION_CHECK(57, 33, 0, 33, 0)
+      if ( mFormatContext->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO )
+#elif (LIBAVCODEC_VERSION_CHECK(52, 64, 0, 64, 0) || LIBAVUTIL_VERSION_CHECK(50, 14, 0, 14, 0))
       if ( mFormatContext->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO )
 #else
       if ( mFormatContext->streams[i]->codec->codec_type == CODEC_TYPE_VIDEO )
@@ -421,7 +419,11 @@ int RtspThread::run() {
           }
         }
         rtpClock = mediaDesc->getClock();
+#if LIBAVFORMAT_VERSION_CHECK(57, 33, 0, 33, 0)
+        codecId = mFormatContext->streams[i]->codecpar->codec_id;
+#else
         codecId = mFormatContext->streams[i]->codec->codec_id;
+#endif
         break;
       }  // end if is video
     }  // end foreach stream
@@ -639,14 +641,14 @@ int RtspThread::run() {
       RtpDataThread rtpDataThread( *this, *source );
       RtpCtrlThread rtpCtrlThread( *this, *source );
 
-      Select select( double(config.http_timeout)/1000.0 );
+      ZM::Select select( double(config.http_timeout)/1000.0 );
       select.addReader( &mRtspSocket );
 
       Buffer buffer( ZM_NETWORK_BUFSIZ );
       std::string keepaliveMessage = "OPTIONS "+mUrl+" RTSP/1.0\r\n";
       std::string keepaliveResponse = "RTSP/1.0 200 OK\r\n";
       while ( !mStop && select.wait() >= 0 ) {
-        Select::CommsList readable = select.getReadable();
+        ZM::Select::CommsList readable = select.getReadable();
         if ( readable.size() == 0 ) {
           Error( "RTSP timed out" );
           break;

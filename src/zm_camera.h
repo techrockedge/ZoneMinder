@@ -20,15 +20,12 @@
 #ifndef ZM_CAMERA_H
 #define ZM_CAMERA_H
 
-#include <sys/types.h>
-#include <sys/ioctl.h>
-
 #include "zm_image.h"
-#include "zm_packet.h"
+#include <sys/ioctl.h>
+#include <sys/types.h>
 
-class Camera;
-
-#include "zm_monitor.h"
+class Monitor;
+class ZMPacket;
 
 //
 // Abstract base class for cameras. This is intended just to express
@@ -38,8 +35,7 @@ class Camera {
 protected:
   typedef enum { LOCAL_SRC, REMOTE_SRC, FILE_SRC, FFMPEG_SRC, LIBVLC_SRC, CURL_SRC, VNC_SRC } SourceType;
 
-  unsigned int  monitor_id;
-  Monitor *     monitor; // Null on instantiation, set as soon as possible.
+  const Monitor *monitor;
   SourceType    type;
   unsigned int  width;
   unsigned int  linesize;
@@ -65,7 +61,7 @@ protected:
 
 public:
   Camera(
-      unsigned int p_monitor_id,
+      const Monitor* monitor,
       SourceType p_type,
       unsigned int p_width,
       unsigned int p_height,
@@ -80,9 +76,6 @@ public:
       );
   virtual ~Camera();
 
-  unsigned int getId() const { return monitor_id; }
-  Monitor *getMonitor();
-  void  setMonitor( Monitor *p_monitor );
   SourceType Type() const { return type; }
   bool IsLocal() const { return type == LOCAL_SRC; }
   bool IsRemote() const { return type == REMOTE_SRC; }

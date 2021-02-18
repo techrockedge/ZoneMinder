@@ -17,16 +17,17 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 // 
 
-//#include "zm_logger.h"
-#include "zm.h"
 #include "zm_utils.h"
 
-#include <string.h>
+#include "zm_config.h"
+#include "zm_logger.h"
 #include <algorithm>
-#include <stdio.h>
-#include <stdarg.h>
+#include <cstdarg>
+#include <cstring>
 #include <fcntl.h> /* Definition of AT_* constants */
+#include <sstream>
 #include <sys/stat.h>
+
 #if defined(__arm__)
 #include <sys/auxv.h>
 #endif

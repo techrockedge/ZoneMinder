@@ -21,10 +21,8 @@
 
 #include "zm_logger.h"
 #include "zm_utils.h"
-
-#include <string.h>
-#include <signal.h>
-#include <errno.h>
+#include <cstring>
+#include <csignal>
 #include <sys/time.h>
 
 struct timespec getTimeout( int secs ) {
@@ -61,7 +59,7 @@ Mutex::~Mutex() {
     Error("Unable to destroy pthread mutex: %s", strerror(errno));
 }
 
-int Mutex::trylock() {
+int Mutex::try_lock() {
   return pthread_mutex_trylock(&mMutex);
 }
 void Mutex::lock() {
@@ -70,16 +68,14 @@ void Mutex::lock() {
   //Debug(3, "Lock");
 }
 
-void Mutex::lock( int secs ) {
+bool Mutex::try_lock_for(int secs) {
   struct timespec timeout = getTimeout(secs);
-  if ( pthread_mutex_timedlock(&mMutex, &timeout) < 0 )
-    throw ThreadException(stringtf("Unable to timedlock pthread mutex: %s", strerror(errno)));
+  return pthread_mutex_timedlock(&mMutex, &timeout) == 0;
 }
 
-void Mutex::lock( double secs ) {
+bool Mutex::try_lock_for(double secs) {
   struct timespec timeout = getTimeout(secs);
-  if ( pthread_mutex_timedlock(&mMutex, &timeout) < 0 )
-    throw ThreadException(stringtf("Unable to timedlock pthread mutex: %s", strerror(errno)));
+  return pthread_mutex_timedlock(&mMutex, &timeout) == 0;
 }
 
 void Mutex::unlock() {

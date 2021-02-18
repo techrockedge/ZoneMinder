@@ -20,8 +20,9 @@
 #ifndef ZM_DB_H
 #define ZM_DB_H
 
-#include <mysql/mysql.h>
 #include "zm_thread.h"
+#include <mysql/mysql.h>
+#include <mysql/mysqld_error.h>
 
 class zmDbRow {
   private:
@@ -43,8 +44,12 @@ class zmDbRow {
 extern MYSQL dbconn;
 extern RecursiveMutex db_mutex;
 
+extern bool zmDbConnected;
+
 bool zmDbConnect();
 void zmDbClose();
+int zmDbDo(const char *query);
+int zmDbDoInsert(const char *query);
 
 MYSQL_RES * zmDbFetch( const char *query );
 zmDbRow *zmDbFetchOne( const char *query );

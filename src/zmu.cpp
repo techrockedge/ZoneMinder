@@ -86,14 +86,13 @@ Options for use with monitors:
 
 */
 
-#include <getopt.h>
-
 #include "zm.h"
 #include "zm_db.h"
 #include "zm_user.h"
 #include "zm_signal.h"
 #include "zm_monitor.h"
 #include "zm_local_camera.h"
+#include <getopt.h>
 
 void Usage(int status=-1) {
   fputs(
@@ -418,8 +417,10 @@ int main(int argc, char *argv[]) {
   }
   //printf( "Monitor %d, Function %d\n", mon_id, function );
 
-  zmLoadConfig();
-
+  logInit("zmu");
+  zmLoadStaticConfig();
+  zmDbConnect();
+  zmLoadDBConfig();
   logInit("zmu");
 
   zmSetDefaultTermHandler();
@@ -474,7 +475,7 @@ int main(int argc, char *argv[]) {
   } // end if auth
 
   if ( mon_id > 0 ) {
-    Monitor *monitor = Monitor::Load(mon_id, function&(ZMU_QUERY|ZMU_ZONES), Monitor::QUERY);
+    std::shared_ptr<Monitor> monitor = Monitor::Load(mon_id, function&(ZMU_QUERY|ZMU_ZONES), Monitor::QUERY);
     if ( !monitor ) {
       Error("Unable to load monitor %d", mon_id);
       exit_zmu(-1);
@@ -485,8 +486,6 @@ int main(int argc, char *argv[]) {
     }
     if ( !monitor->connect() ) {
       Error("Can't connect to capture daemon: %d %s", monitor->Id(), monitor->Name());
-      delete monitor;
-      monitor = nullptr;
       exit_zmu(-1);
     }
 
@@ -706,8 +705,6 @@ int main(int argc, char *argv[]) {
     if ( !function ) {
       Usage();
     }
-    delete monitor;
-    monitor = nullptr;
   } else { // non monitor functions
     if ( function & ZMU_QUERY ) {
 #if ZM_HAS_V4L
@@ -746,7 +743,7 @@ int main(int argc, char *argv[]) {
         int monitor_function = atoi(dbrow[1]);
         if ( !user || user->canAccess(monitor_id) ) {
           if ( monitor_function > 1 ) {
-            Monitor *monitor = Monitor::Load(monitor_id, false, Monitor::QUERY);
+            std::shared_ptr<Monitor> monitor = Monitor::Load(monitor_id, false, Monitor::QUERY);
             if ( monitor && monitor->connect() ) {
               struct timeval tv = monitor->GetTimestamp();
               printf( "%4d%5d%6d%9d%11ld.%02ld%6d%6d%8" PRIu64 "%8.2f\n",
@@ -760,7 +757,6 @@ int main(int argc, char *argv[]) {
                 monitor->GetLastEventId(),
                 monitor->GetFPS()
               );
-              delete monitor;
             }
           } else {
             struct timeval tv = { 0, 0 };

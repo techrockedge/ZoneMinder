@@ -17,13 +17,13 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //
 
-#include "zm.h"
+#include "zm_ffmpeg_camera.h"
+
+#include "zm_packet.h"
 #include "zm_signal.h"
 #include "zm_utils.h"
 
 #if HAVE_LIBAVFORMAT
-
-#include "zm_ffmpeg_camera.h"
 
 extern "C" {
 #include "libavutil/time.h"
@@ -35,7 +35,6 @@ extern "C" {
 }
 
 #include <string>
-#include <locale>
 
 #if HAVE_LIBAVUTIL_HWCONTEXT_H
 #if LIBAVCODEC_VERSION_CHECK(57, 89, 0, 89, 0)
@@ -92,7 +91,7 @@ static enum AVPixelFormat find_fmt_by_hw_type(const enum AVHWDeviceType type) {
 #endif
 
 FfmpegCamera::FfmpegCamera(
-    int p_id,
+    const Monitor *monitor,
     const std::string &p_path,
     const std::string &p_method,
     const std::string &p_options,
@@ -108,7 +107,7 @@ FfmpegCamera::FfmpegCamera(
     const std::string &p_hwaccel_name,
     const std::string &p_hwaccel_device) :
   Camera(
-      p_id,
+      monitor,
       FFMPEG_SRC,
       p_width,
       p_height,
@@ -205,7 +204,7 @@ int FfmpegCamera::Capture(ZMPacket &zm_packet) {
     }
     return -1;
   }
-  dumpPacket(mFormatContext->streams[packet.stream_index], &packet, "ffmpeg_camera in");
+  ZM_DUMP_STREAM_PACKET(mFormatContext->streams[packet.stream_index], packet, "ffmpeg_camera in");
 
 #if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
   zm_packet.codec_type = mFormatContext->streams[packet.stream_index]->codecpar->codec_type;
@@ -341,7 +340,13 @@ int FfmpegCamera::OpenFfmpeg() {
       mVideoStreamId, mAudioStreamId);
 
   AVCodec *mVideoCodec = nullptr;
-  if ( mVideoStream->codecpar->codec_id == AV_CODEC_ID_H264 ) {
+  if ( mVideoStream->
+#if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
+      codecpar
+#else
+      codec
+#endif
+      ->codec_id == AV_CODEC_ID_H264 ) {
     if ( (mVideoCodec = avcodec_find_decoder_by_name("h264_mmal")) == nullptr ) {
       Debug(1, "Failed to find decoder (h264_mmal)");
     } else {
@@ -350,7 +355,13 @@ int FfmpegCamera::OpenFfmpeg() {
   }
 
   if ( !mVideoCodec ) {
-    mVideoCodec = avcodec_find_decoder(mVideoStream->codecpar->codec_id);
+    mVideoCodec = avcodec_find_decoder(mVideoStream->
+#if LIBAVCODEC_VERSION_CHECK(57, 64, 0, 64, 0)
+        codecpar
+#else
+        codec
+#endif
+        ->codec_id);
     if ( !mVideoCodec ) {
       // Try and get the codec from the codec context
       Error("Can't find codec for video stream from %s", mPath.c_str());

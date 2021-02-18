@@ -22,12 +22,7 @@
 
 #include "zm_camera.h"
 #include "zm_rtsp_auth.h"
-
 #include <string>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
 
 #define SOCKET_BUF_SIZE 8192
 
@@ -57,7 +52,7 @@ protected:
 
 public:
   RemoteCamera(
-    unsigned int p_monitor_id,
+    const Monitor *monitor,
     const std::string &p_proto,
     const std::string &p_host,
     const std::string &p_port,

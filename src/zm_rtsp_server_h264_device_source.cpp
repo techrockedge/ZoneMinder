@@ -6,17 +6,17 @@
 **
 ** -------------------------------------------------------------------------*/
 
-#include "zm.h"
+#include "zm_rtsp_server_h264_device_source.h"
+
+#include "zm_config.h"
+#include "zm_logger.h"
+#include "zm_rtsp_server_frame.h"
+#include <iomanip>
+#include <sstream>
 
 #if HAVE_RTSP_SERVER
-
-#include <sstream>
-#include <iomanip>
-
 // live555
 #include <Base64.hh>
-
-#include "zm_rtsp_server_h264_device_source.h"
 
 // ---------------------------------
 // H264 ZoneMinder FramedSource
@@ -24,12 +24,12 @@
 //
 H264_ZoneMinderDeviceSource::H264_ZoneMinderDeviceSource(
     UsageEnvironment& env,
-    Monitor *monitor,
+    std::shared_ptr<Monitor> monitor,
     AVStream *stream,
     unsigned int queueSize,
     bool repeatConfig,
     bool keepMarker)
-  : H26X_ZoneMinderDeviceSource(env, monitor, stream, queueSize, repeatConfig, keepMarker)
+  : H26X_ZoneMinderDeviceSource(env, std::move(monitor), stream, queueSize, repeatConfig, keepMarker)
 {
   // extradata appears to simply be the SPS and PPS NAL's
   this->splitFrames(m_stream->codecpar->extradata, m_stream->codecpar->extradata_size);
@@ -89,12 +89,12 @@ std::list< std::pair<unsigned char*, size_t> > H264_ZoneMinderDeviceSource::spli
 
 H265_ZoneMinderDeviceSource::H265_ZoneMinderDeviceSource(
     UsageEnvironment& env,
-    Monitor *monitor,
+    std::shared_ptr<Monitor> monitor,
     AVStream *stream,
     unsigned int queueSize,
     bool repeatConfig,
     bool keepMarker)
-  : H26X_ZoneMinderDeviceSource(env, monitor, stream, queueSize, repeatConfig, keepMarker)
+  : H26X_ZoneMinderDeviceSource(env, std::move(monitor), stream, queueSize, repeatConfig, keepMarker)
 {
   // extradata appears to simply be the SPS and PPS NAL's
   this->splitFrames(m_stream->codecpar->extradata, m_stream->codecpar->extradata_size);
@@ -226,4 +226,4 @@ unsigned char*  H26X_ZoneMinderDeviceSource::extractFrame(unsigned char* frame, 
 
 	return outFrame;
 }
-#endif
+#endif // HAVE_RTSP_SERVER

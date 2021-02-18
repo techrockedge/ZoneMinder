@@ -20,17 +20,16 @@
 #ifndef ZM_THREAD_H
 #define ZM_THREAD_H
 
-class RecursiveMutex;
-
-
 #include "zm_config.h"
-#include <unistd.h>
+#include "zm_exception.h"
+#include "zm_utils.h"
 #include <pthread.h>
+#include <unistd.h>
+
 #ifdef HAVE_SYS_SYSCALL_H
 #include <sys/syscall.h>
 #endif // HAVE_SYS_SYSCALL_H
-#include "zm_exception.h"
-#include "zm_utils.h"
+
 #ifdef __FreeBSD__
 #include <sys/thr.h>
 #endif
@@ -66,7 +65,7 @@ public:
 class Mutex {
   friend class Condition;
 
-  private:
+  protected:
     pthread_mutex_t mMutex;
 
   public:
@@ -79,17 +78,15 @@ class Mutex {
     }
 
   public:
-    int trylock();
+    int try_lock();
     void lock();
-    void lock( int secs );
-    void lock( double secs );
+    bool try_lock_for(int secs);
+    bool try_lock_for(double secs);
     void unlock();
     bool locked();
 };
 
 class RecursiveMutex : public Mutex {
-  private:
-    pthread_mutex_t mMutex;
   public:
     RecursiveMutex();
 };
