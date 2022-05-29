@@ -43,6 +43,7 @@ require Date::Parse;
 require POSIX;
 use Date::Format qw(time2str);
 use Time::HiRes qw(gettimeofday tv_interval stat);
+use Scalar::Util qw(looks_like_number);
 
 #our @ISA = qw(ZoneMinder::Object);
 use parent qw(ZoneMinder::Object);
@@ -355,7 +356,7 @@ sub GenerateVideo {
 # commits unless we started the transaction.
 
 sub delete {
-  my $event = $_[0];
+  my $event = shift;
 
   if ( !$event->canEdit() ) {
     Warning('No permission to delete event.');
@@ -441,37 +442,7 @@ sub delete_files {
       ( $storage_path ) = ( $storage_path =~ /^(.*)$/ ); # De-taint
       ( $event_path ) = ( $event_path =~ /^(.*)$/ ); # De-taint
 
-      my $deleted = 0;
-      if ( $$Storage{Type} and ( $$Storage{Type} eq 's3fs' ) ) {
-        my $url = $$Storage{Url};
-        $url =~ s/^(s3|s3fs):\/\///ig;
-        my ( $aws_id, $aws_secret, $aws_host, $aws_bucket, $subpath ) = ( $url =~ /^\s*([^:]+):([^@]+)@([^\/]*)\/([^\/]+)(\/.+)?\s*$/ );
-        Debug("S3 url parsed to id:$aws_id secret:$aws_secret host:$aws_host, bucket:$aws_bucket, subpath:$subpath\n from $url");
-        eval {
-          require Net::Amazon::S3;
-          my $s3 = Net::Amazon::S3->new( {
-              aws_access_key_id     => $aws_id,
-              aws_secret_access_key => $aws_secret,
-              ( $aws_host ? ( host => $aws_host ) : () ),
-              authorization_method => 'Net::Amazon::S3::Signature::V4',
-            });
-          my $bucket = $s3->bucket($aws_bucket);
-          if ( ! $bucket ) {
-            Error("S3 bucket $bucket not found.");
-            die;
-          }
-          if ( $bucket->delete_key($subpath.$event_path) ) {
-            $deleted = 1;
-          } else {
-            Error('Failed to delete from S3:'.$s3->err . ': ' . $s3->errstr);
-          }
-        };
-        Error($@) if $@;
-      } # end if s3fs
-      if ( !$deleted ) {
-        my $command = "/bin/rm -rf $storage_path/$event_path";
-        ZoneMinder::General::executeShellCommand($command);
-      }
+      $Storage->delete_path($event_path);
     } else {
       Error('No event path in delete files. ' . $event->to_string());
     } # end if event_path
@@ -512,6 +483,46 @@ sub delete_files {
       pop @path_parts;
     } # end while path_parts
 
+  } # end foreach Storage
+} # end sub delete_files
+
+sub delete_analysis_jpegs {
+  my $event = shift;
+
+  if ( !$event->canEdit() ) {
+    Warning('No permission to delete event.');
+    return 'No permission to delete event.';
+  }
+
+  foreach my $Storage (
+    @_ ? ($_[0]) : (
+      new ZoneMinder::Storage($$event{StorageId}),
+      ( $$event{SecondaryStorageId} ? new ZoneMinder::Storage($$event{SecondaryStorageId}) : () ),
+    ) ) {
+    my $storage_path = $Storage->Path();
+
+    if ( !$storage_path ) {
+      Error("Empty storage path when deleting files for event $$event{Id} with storage id $$event{StorageId}");
+      return;
+    }
+
+    if ( !$$event{MonitorId} ) {
+      Error("No monitor id assigned to event $$event{Id}");
+      return;
+    }
+    my $event_path = $event->RelativePath();
+    Debug("Deleting analysis jpegs for Event $$event{Id} from $storage_path///$event_path, scheme is $$event{Scheme}.");
+    if ( $event_path ) {
+      ( $storage_path ) = ( $storage_path =~ /^(.*)$/ ); # De-taint
+      ( $event_path ) = ( $event_path =~ /^(.*)$/ ); # De-taint
+      my @files = glob("$storage_path/$event_path/*analyse.jpg");
+      Debug(@files . ' analysis jpegs found to delete');
+      foreach my $file (@files) {
+        $Storage->delete_path($event_path.'/'.$file);
+      }
+    } else {
+      Error('No event path in delete files. ' . $event->to_string());
+    } # end if event_path
   } # end foreach Storage
 } # end sub delete_files
 
@@ -584,6 +595,7 @@ sub DiskSpace {
   return $_[0]{DiskSpace};
 }
 
+# Icon: I removed the locking from this. So we now have an assumption that the Event object is up to date.
 sub CopyTo {
   my ( $self, $NewStorage ) = @_;
 
@@ -600,7 +612,7 @@ sub CopyTo {
   # First determine if we can move it to the dest.
   # We do this before bothering to lock the event
   my ( $NewPath ) = ( $NewStorage->Path() =~ /^(.*)$/ ); # De-taint
-  if ( ! $$NewStorage{Id} ) {
+  if ( ! looks_like_number($$NewStorage{Id}) ) {
     return 'New storage does not have an id.  Moving will not happen.';
   } elsif ( $$NewStorage{Id} == $$self{StorageId} ) {
     return 'Event is already located at ' . $NewPath;
@@ -614,16 +626,12 @@ sub CopyTo {
     Debug("$NewPath is good");
   }
 
-  $ZoneMinder::Database::dbh->begin_work();
-  $self->lock_and_load();
   # data is reloaded, so need to check that the move hasn't already happened.
   if ( $$self{StorageId} == $$NewStorage{Id} ) {
-    $ZoneMinder::Database::dbh->commit();
     return 'Event has already been moved by someone else.';
   }
 
   if ( $$OldStorage{Id} != $$self{StorageId} ) {
-    $ZoneMinder::Database::dbh->commit();
     return 'Old Storage path changed, Event has moved somewhere else.';
   }
 
@@ -661,39 +669,21 @@ sub CopyTo {
           }
 
           my $event_path = $subpath.$self->RelativePath();
-          if ( 0 ) { # Not neccessary
-            Debug("Making directory $event_path/");
-            if ( !$bucket->add_key($event_path.'/', '') ) {
-              Warning("Unable to add key for $event_path/ :". $s3->err . ': '. $s3->errstr());
-            }
-          }
 
           my @files = glob("$OldPath/*");
           Debug("Files to move @files");
-          foreach my $file ( @files ) {
+          foreach my $file (@files) {
             next if $file =~ /^\./;
-            ( $file ) = ( $file =~ /^(.*)$/ ); # De-taint
+            ($file) = ($file =~ /^(.*)$/); # De-taint
             my $starttime = [gettimeofday];
             Debug("Moving file $file to $NewPath");
             my $size = -s $file;
-            if ( ! $size ) {
+            if (!$size) {
               Info('Not moving file with 0 size');
             }
-            if ( 0 ) {
-              my $file_contents = File::Slurp::read_file($file);
-              if ( ! $file_contents ) {
-                die 'Loaded empty file, but it had a size. Giving up';
-              }
-
-              my $filename = $event_path.'/'.File::Basename::basename($file);
-              if ( ! $bucket->add_key($filename, $file_contents) ) {
-                die "Unable to add key for $filename : ".$s3->err . ': ' . $s3->errstr;
-              }
-            } else {
-              my $filename = $event_path.'/'.File::Basename::basename($file);
-              if ( ! $bucket->add_key_filename($filename, $file) ) {
-                die "Unable to add key for $filename " . $s3->err . ': '. $s3->errstr;
-              }
+            my $filename = $event_path.'/'.File::Basename::basename($file);
+            if (!$bucket->add_key_filename($filename, $file)) {
+              die "Unable to add key for $filename " . $s3->err . ': '. $s3->errstr;
             }
 
             my $duration = tv_interval($starttime);
@@ -704,16 +694,15 @@ sub CopyTo {
         };
         Error($@) if $@;
       } else {
-        Error("Unable to parse S3 Url into it's component parts.");
+        Error('Unable to parse S3 Url into it\'s component parts.');
       }
-      #die $@ if $@;
     } # end if Url
   } # end if s3
 
   my $error = '';
-  if ( !$moved ) {
+  if (!$moved) {
     File::Path::make_path($NewPath, {error => \my $err});
-    if ( @$err ) {
+    if (@$err) {
       for my $diag (@$err) {
         my ($file, $message) = %$diag;
         next if $message eq 'File exists';
@@ -724,23 +713,16 @@ sub CopyTo {
         }
       }
     }
-    if ( $error ) {
-      $ZoneMinder::Database::dbh->commit();
-      return $error;
-    }
+    return $error if $error;
     my @files = glob("$OldPath/*");
-    if ( ! @files ) {
-      $ZoneMinder::Database::dbh->commit();
-      return 'No files to move.';
-    }
+    return 'No files to move.' if !@files;
 
     for my $file (@files) {
       next if $file =~ /^\./;
-      ( $file ) = ( $file =~ /^(.*)$/ ); # De-taint
+      ($file) = ($file =~ /^(.*)$/); # De-taint
       my $starttime = [gettimeofday];
-      Debug("Moving file $file to $NewPath");
       my $size = -s $file;
-      if ( ! File::Copy::copy( $file, $NewPath ) ) {
+      if (!File::Copy::copy($file, $NewPath)) {
         $error .= "Copy failed: for $file to $NewPath: $!";
         last;
       }
@@ -749,34 +731,38 @@ sub CopyTo {
     } # end foreach file.
   } # end if ! moved
 
-  if ( $error ) {
-    $ZoneMinder::Database::dbh->commit();
-    return $error;
-  }
+  return $error;
 } # end sub CopyTo
 
 sub MoveTo {
-  my ( $self, $NewStorage ) = @_;
+  my ($self, $NewStorage) = @_;
 
-  if ( !$self->canEdit() ) {
+  if (!$self->canEdit()) {
     Warning('No permission to move event.');
     return 'No permission to move event.';
   }
 
-  my $OldStorage = $self->Storage(undef);
+  my $was_in_transaction = !$ZoneMinder::Database::dbh->{AutoCommit};
+  $ZoneMinder::Database::dbh->begin_work() if !$was_in_transaction;
+  if (!$self->lock_and_load()) {
+    Warning('Unable to lock event record '.$$self{Id}); # The fact that we are in a transaction might not imply locking
+    $ZoneMinder::Database::dbh->commit() if !$was_in_transaction;
+    return 'Unable to lock event record';
+  }
 
+  my $OldStorage = $self->Storage(undef);
   my $error = $self->CopyTo($NewStorage);
+  if (!$error) {
+    # Succeeded in copying all files, so we may now update the Event.
+    $$self{StorageId} = $$NewStorage{Id};
+    $self->Storage($NewStorage);
+    $error .= $self->save();
+
+    # Going to leave it to upper layer as to whether we rollback or not
+  }
+  $ZoneMinder::Database::dbh->commit() if !$was_in_transaction;
   return $error if $error;
 
-  # Succeeded in copying all files, so we may now update the Event.
-  $$self{StorageId} = $$NewStorage{Id};
-  $self->Storage($NewStorage);
-  $error .= $self->save();
-  if ( $error ) {
-    $ZoneMinder::Database::dbh->commit();
-    return $error;
-  }
-  $ZoneMinder::Database::dbh->commit();
   $self->delete_files($OldStorage);
   return $error;
 } # end sub MoveTo

@@ -23,8 +23,9 @@
 #include "zm_signal.h"
 #include "zm_monitorstream.h"
 #include "zm_eventstream.h"
-#include "zm_fifo.h"
+#include "zm_fifo_stream.h"
 #include <string>
+#include <unistd.h>
 
 bool ValidateAccess(User *user, int mon_id) {
   bool allowed = true;
@@ -62,6 +63,7 @@ int main(int argc, const char *argv[], char **envp) {
   double maxfps = 10.0;
   unsigned int bitrate = 100000;
   unsigned int ttl = 0;
+  bool  analysis_frames = false;
   EventStream::StreamMode replay = EventStream::MODE_NONE;
   std::string username;
   std::string password;
@@ -86,6 +88,7 @@ int main(int argc, const char *argv[], char **envp) {
   zmLoadStaticConfig();
   zmDbConnect();
   zmLoadDBConfig();
+  logInit(log_id_string);
 
   for (char **env = envp; *env != 0; env++) {
     char *thisEnv = *env;
@@ -113,7 +116,14 @@ int main(int argc, const char *argv[], char **envp) {
     char const *value = strtok(nullptr, "=");
     if ( !value )
       value = "";
-    if ( !strcmp(name, "source") ) {
+    if ( !strcmp(name, "analysis") ) {
+      if ( !strcmp(value, "true") ) {
+        analysis_frames = true;
+      } else {
+        analysis_frames = (atoi(value) == 1);
+      }
+      Debug(1, "Viewing analysis frames");
+    } else if ( !strcmp(name, "source") ) {
       if ( !strcmp(value, "event") ) {
         source = ZMS_EVENT;
       } else if ( !strcmp(value, "fifo") ) {
@@ -228,7 +238,8 @@ int main(int argc, const char *argv[], char **envp) {
     user = nullptr;
   }  // end if config.opt_use_auth
 
-  hwcaps_detect();
+  HwCapsDetect();
+  Image::Initialise();
   zmSetDefaultTermHandler();
   zmSetDefaultDieHandler();
 
@@ -238,10 +249,11 @@ int main(int argc, const char *argv[], char **envp) {
   }
   fprintf(stdout, "Server: ZoneMinder Video Server/%s\r\n", ZM_VERSION);
 
-  time_t now = time(nullptr);
+  time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
   char date_string[64];
+  tm now_tm = {};
   strftime(date_string, sizeof(date_string)-1,
-      "%a, %d %b %Y %H:%M:%S GMT", gmtime(&now));
+      "%a, %d %b %Y %H:%M:%S GMT", gmtime_r(&now, &now_tm));
 
   fputs("Last-Modified: ", stdout);
   fputs(date_string, stdout);
@@ -260,13 +272,8 @@ int main(int argc, const char *argv[], char **envp) {
     stream.setStreamTTL(ttl);
     stream.setStreamQueue(connkey);
     stream.setStreamBuffer(playback_buffer);
-    if ( !stream.setStreamStart(monitor_id) ) {
-      Error("Unable set start stream for monitor %d", monitor_id);
-      stream.sendTextFrame("Unable to connect to monitor");
-      logTerm();
-      zmDbClose();
-      return -1;
-    }
+    stream.setStreamStart(monitor_id);
+    stream.setStreamFrameType(analysis_frames ? StreamBase::FRAME_ANALYSIS: StreamBase::FRAME_NORMAL);
 
     if ( mode == ZMS_JPEG ) {
       stream.setStreamType(MonitorStream::STREAM_JPEG);
@@ -277,19 +284,9 @@ int main(int argc, const char *argv[], char **envp) {
     } else if ( mode == ZMS_SINGLE ) {
       stream.setStreamType(MonitorStream::STREAM_SINGLE);
     } else {
-#if HAVE_LIBAVCODEC
       stream.setStreamFormat(format);
       stream.setStreamBitrate(bitrate);
       stream.setStreamType(MonitorStream::STREAM_MPEG);
-#else  // HAVE_LIBAVCODEC
-      Error("MPEG streaming of '%s' attempted while disabled", query);
-      fprintf(stderr, "MPEG streaming is disabled.\n"
-          "You should configure with the --with-ffmpeg"
-          " option and rebuild to use this functionality.\n");
-      logTerm();
-      zmDbClose();
-      return -1;
-#endif  // HAVE_LIBAVCODEC
     }
     stream.runStream();
   } else if ( source == ZMS_FIFO ) {
@@ -313,22 +310,13 @@ int main(int argc, const char *argv[], char **envp) {
       Debug(3, "Setting stream start to frame (%d)", frame_id);
       stream.setStreamStart(event_id, frame_id);
     }
+    stream.setStreamFrameType(analysis_frames ? StreamBase::FRAME_ANALYSIS: StreamBase::FRAME_NORMAL);
     if ( mode == ZMS_JPEG ) {
       stream.setStreamType(EventStream::STREAM_JPEG);
     } else {
-#if HAVE_LIBAVCODEC
       stream.setStreamFormat(format);
       stream.setStreamBitrate(bitrate);
       stream.setStreamType(EventStream::STREAM_MPEG);
-#else  // HAVE_LIBAVCODEC
-      Error("MPEG streaming of '%s' attempted while disabled", query);
-      fprintf(stderr, "MPEG streaming is disabled.\n"
-          "You should ensure the ffmpeg libraries are installed and detected"
-          " and rebuild to use this functionality.\n");
-      logTerm();
-      zmDbClose();
-      return -1;
-#endif  // HAVE_LIBAVCODEC
     }  // end if jpeg or mpeg
     stream.runStream();
   } else {
@@ -336,6 +324,8 @@ int main(int argc, const char *argv[], char **envp) {
   }  // end if monitor or event
 
   Debug(1, "Terminating");
+  Image::Deinitialise();
+  dbQueue.stop();
   logTerm();
   zmDbClose();
 

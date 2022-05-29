@@ -29,7 +29,7 @@ global $CLANG;
         </button>
       </div>
       <div class="modal-body">
-        <p><?php echo sprintf( $CLANG['CurrentLogin'], $user['Username'] ) ?></p>
+        <p><?php echo sprintf( $CLANG['CurrentLogin'], validHtmlStr($user['Username']) ) ?></p>
 <?php if ( canView('System') ) { ?>
         <p>Other logged in users:<br/>
 <table class="table table-striped">
@@ -43,8 +43,9 @@ global $CLANG;
   <tbody>
 <?php
 require_once('includes/User.php');
-$result = dbQuery('SELECT * FROM Sessions ORDER BY access DESC');
-if ( ! $result ) return;
+$result = dbQuery('SELECT * FROM Sessions WHERE access > ? ORDER BY access DESC LIMIT 100',
+array(time() - ZM_COOKIE_LIFETIME));
+if (!$result) return;
 
 $current_session = $_SESSION;
 zm_session_start();
@@ -52,25 +53,24 @@ zm_session_start();
 $user_cache = array();
 while ( $row = $result->fetch(PDO::FETCH_ASSOC) ) {
   $_SESSION = array();
-  if ( ! session_decode($row['data']) ) {
-    ZM\Warning('Failed to decode ' . $row['data']);
+  if (!session_decode($row['data'])) {
+    ZM\Warning('Failed to decode '.$row['data']);
     continue;
   }
-  ZM\Debug(print_r($_SESSION, true));
-  if ( isset($_SESSION['last_time']) )  {
+  if (isset($_SESSION['last_time']))  {
     # This is a dead session
     continue;
   }
-  if ( !isset($_SESSION['username']) ) {
+  if (!isset($_SESSION['username'])) {
     # Not logged in
     continue;
   }
-  if ( isset($user_cache[$_SESSION['username']]) ) {
+  if (isset($user_cache[$_SESSION['username']])) {
     $user = $user_cache[$_SESSION['username']];
   } else {
     $user = ZM\User::find_one(array('Username'=>$_SESSION['username']));
-    if ( ! $user ) {
-      ZM\Debug('User not found for ' . $_SESSION['username']);
+    if (!$user) {
+      ZM\Debug('User not found for '.$_SESSION['username']);
       continue;
     }
     $user_cache[$_SESSION['username']] = $user;
@@ -78,8 +78,8 @@ while ( $row = $result->fetch(PDO::FETCH_ASSOC) ) {
 
   echo '
   <tr>
-    <td>'.$user->Username().'</td>
-    <td>'.$_SESSION['remoteAddr'].'</td>
+    <td>'.validHtmlStr($user->Username()).'</td>
+    <td>'.validHtmlStr($_SESSION['remoteAddr']).'</td>
     <td>'.strftime(STRF_FMT_DATETIME_SHORTER, $row['access']).'</td>
   </tr>
 ';

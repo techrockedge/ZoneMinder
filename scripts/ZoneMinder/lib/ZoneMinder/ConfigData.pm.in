@@ -1,6 +1,6 @@
 # ==========================================================================
 #
-# ZoneMinder Config Data Module, $Date: 2011-01-20 18:49:42 +0000 (Thu, 20 Jan 2011) $, $Revision: 3230 $
+# ZoneMinder Config Data Module
 # Copyright (C) 2001-2008  Philip Coombes
 #
 # This program is free software; you can redistribute it and/or
@@ -304,11 +304,12 @@ our @options = (
       { name=>'ZM_AUTH_RELAY', value=>'hashed' }
     ],
     type        => $types{string},
+    private     => 1,
     category    => 'system',
   },
   {
     name        => 'ZM_AUTH_HASH_IPS',
-    default     => 'yes',
+    default     => 'no',
     description => 'Include IP addresses in the authentication hash',
     help        => q`
       When ZoneMinder is running in hashed authenticated mode it can
@@ -346,7 +347,7 @@ our @options = (
   },
   {
     name        => 'ZM_AUTH_HASH_LOGINS',
-    default     => 'no',
+    default     => 'yes',
     description => 'Allow login by authentication hash',
     help        => q`
       The normal process for logging into ZoneMinder is via the login
@@ -368,6 +369,28 @@ our @options = (
       { name=>'ZM_AUTH_RELAY', value=>'hashed' }
     ],
     type        => $types{boolean},
+    category    => 'system',
+  },
+  {
+    name        => 'ZM_JANUS_SECRET',
+    default     => '',
+    description => 'Password for Janus streaming administration.',
+    help        => q`This value should be set to a secure password,
+      and match the admin_key value in janus.plugin.streaming.config.
+      `,
+    type        => $types{string},
+    category    => 'system',
+  },
+  {
+    name        => 'ZM_JANUS_PATH',
+    default     => '',
+    description => 'URL for Janus HTTP/S port',
+    help        => q`Janus requires HTTP/S communication to administer
+      and initiate h.264 streams. If left blank, this will default to
+      the ZM hostname, port 8088/janus. This setting is particularly
+      useful for putting janus behind a reverse proxy.
+      `,
+    type        => $types{string},
     category    => 'system',
   },
   {
@@ -462,6 +485,7 @@ our @options = (
                      {name=>'ZM_OPT_USE_GOOG_RECAPTCHA', value=>'yes'}
                    ],
     type        => $types{string},
+    private     => 1,
     category    => 'system',
   },
   {
@@ -477,6 +501,7 @@ our @options = (
                      {name=>'ZM_OPT_USE_GOOG_RECAPTCHA', value=>'yes'}
                    ],
     type        => $types{string},
+    private     => 1,
     category    => 'system',
   },
   {
@@ -508,7 +533,7 @@ our @options = (
   },
   {
     name        =>  'ZM_SYSTEM_SHUTDOWN',
-    default     =>  'true',
+    default     =>  'no',
     description =>  'Allow Admin users to power off or restart the system from the ZoneMinder UI.',
     help        =>  'The system will need to have sudo installed and the following added to /etc/sudoers~~
     ~~
@@ -517,6 +542,14 @@ our @options = (
       to perform the shutdown or reboot',
     type      =>  $types{boolean},
     category  =>  'system',
+  },
+  {
+    name        =>  'ZM_FEATURES_SNAPSHOTS',
+    default     =>  'no',
+    description =>  'Enable snapshot functionality.',
+    help        =>  'Snapshots are a collection of events.  They can be created using the snapshot button in montage view.  All visible monitors will have a short event created, archived and added to the Snapshot.',
+    type      =>  $types{boolean},
+    category  =>  'hidden',
   },
   {
     name        => 'ZM_USE_DEEP_STORAGE',
@@ -695,55 +728,6 @@ our @options = (
       to the url to make each invocation of the stream appear unique.
       `,
     type        => $types{boolean},
-    category    => 'images',
-  },
-  {
-    name        => 'ZM_OPT_CAMBOZOLA',
-    default     => 'no',
-    description => 'Is the (optional) cambozola java streaming client installed',
-    help        => q`
-      Cambozola is a handy low fat cheese flavoured Java applet that
-      ZoneMinder uses to view image streams on browsers such as
-      Internet Explorer that don't natively support this format. If
-      you use this browser it is highly recommended to install this
-      from the [cambozola project site](http://www.charliemouse.com/code/cambozola/).
-      However, if it is not installed still images at a lower refresh rate can
-      still be viewed.
-      `,
-    type        => $types{boolean},
-    category    => 'images',
-  },
-  {
-    name        => 'ZM_PATH_CAMBOZOLA',
-    default     => 'cambozola.jar',
-    description => 'Web path to (optional) cambozola java streaming client',
-    help        => q`
-      Cambozola is a handy low fat cheese flavoured Java applet that
-      ZoneMinder uses to view image streams on browsers such as
-      Internet Explorer that don't natively support this format. If
-      you use this browser it is highly recommended to install this
-      from the [cambozola project site](http://www.charliemouse.com/code/cambozola/).
-      However if it is not installed still images at a lower refresh rate can
-      still be viewed. Leave this as 'cambozola.jar' if cambozola is
-      installed in the same directory as the ZoneMinder web client
-      files.
-      `,
-    requires    => [ { name=>'ZM_OPT_CAMBOZOLA', value=>'yes' } ],
-    type        => $types{rel_path},
-    category    => 'images',
-  },
-  {
-    name        => 'ZM_RELOAD_CAMBOZOLA',
-    default     => '0',
-    description => 'After how many seconds should Cambozola be reloaded in live view',
-    help        => q`
-      Cambozola allows for the viewing of streaming MJPEG however it
-      caches the entire stream into cache space on the computer,
-      setting this to a number > 0 will cause it to automatically
-      reload after that many seconds to avoid filling up a hard
-      drive.
-      `,
-    type        => $types{integer},
     category    => 'images',
   },
   {
@@ -1017,10 +1001,15 @@ our @options = (
     name        => 'ZM_PATH_FFMPEG',
     default     => '@PATH_FFMPEG@',
     description => 'Path to (optional) ffmpeg mpeg encoder',
-    help        => 'This path should point to where ffmpeg has been installed.',
+    help        => 'This path should point to where ffmpeg has been installed.~~
+~~
+      Please note this cannot be edited through the Web UI or API.~~
+      It can only be changed through .conf files in @ZM_CONFIG_SUBDIR@~~
+    ',
     requires    => [ { name=>'ZM_OPT_FFMPEG', value=>'yes' } ],
     type        => $types{abs_path},
     category    => 'images',
+    system      => 1,
   },
   {
     name        => 'ZM_FFMPEG_INPUT_OPTIONS',
@@ -1056,7 +1045,7 @@ our @options = (
   },
   {
     name        => 'ZM_FFMPEG_FORMATS',
-    default     => 'mpg mpeg wmv asf avi* mov swf 3gp**',
+    default     => 'mp4* mpg mpeg wmv asf avi mov swf 3gp**',
     description => 'Formats to allow for ffmpeg video generation',
     help        => q`
       Ffmpeg can generate video in many different formats. This
@@ -1088,7 +1077,7 @@ our @options = (
   },
   {
     name        => 'ZM_LOG_LEVEL_SYSLOG',
-    default     => '0',
+    default     => '-1',
     description => 'Save logging output to the system log',
     help        => q`
       ZoneMinder logging is now more integrated between
@@ -1596,7 +1585,7 @@ our @options = (
   },
   {
     name        => 'ZM_WEB_EVENT_DISK_SPACE',
-    default     => 'no',
+    default     => 'yes',
     description => 'Whether to show disk space used by each event.',
     help        => q`
       Adds another column to the listing of events
@@ -1626,7 +1615,7 @@ our @options = (
   },
   {
     name        => 'ZM_WEB_ID_ON_CONSOLE',
-    default     => 'no',
+    default     => 'yes',
     description => 'Should the console list the monitor id',
     help        => q`
       Some find it useful to have the id always visible
@@ -2262,7 +2251,7 @@ our @options = (
   },
   {
     name        => 'ZM_MAX_RESTART_DELAY',
-    default     => '600',
+    default     => '30',
     description => 'Maximum delay (in seconds) for daemon restart attempts.',
     help        => q`
       The zmdc (zm daemon control) process controls when processeses
@@ -2661,7 +2650,7 @@ our @options = (
   },
   {
     name        => 'ZM_WEB_EVENT_SORT_FIELD',
-    default     => 'StartTime',
+    default     => 'StartDateTime',
     description => 'Default field the event lists are sorted by',
     help        => q`
       Events in lists can be initially ordered in any way you want.
@@ -2673,7 +2662,7 @@ our @options = (
       `,
     type        => {
       db_type     =>'string',
-      hint        =>'Id|Name|Cause|DiskSpace|MonitorName|StartTime|Length|Frames|AlarmFrames|TotScore|AvgScore|MaxScore',
+      hint        =>'Id|Name|Cause|DiskSpace|MonitorName|StartDateTime|Length|Frames|AlarmFrames|TotScore|AvgScore|MaxScore',
       pattern     =>qr|.|,
       format      =>q( $1 )
     },
@@ -2847,7 +2836,7 @@ our @options = (
   },
   {
     name        => 'ZM_WEB_H_REFRESH_MAIN',
-    default     => '60',
+    default     => '240',
     introduction => q`
       There are now a number of options that are grouped into
       bandwidth categories, this allows you to configure the
@@ -3105,7 +3094,7 @@ our @options = (
   },
   {
     name        => 'ZM_WEB_H_AJAX_TIMEOUT',
-    default     => '3000',
+    default     => '10000',
     description => 'How long to wait for Ajax request responses (ms)',
     help        => q`
       The newer versions of the live feed and event views use Ajax to
@@ -3758,7 +3747,7 @@ our @options = (
       SSMTP is a lightweight and efficient method to send email.
       The SSMTP application is not installed by default.
       NEW_MAIL_MODULES must also be enabled.
-      Please visit the ZoneMinder [SSMTP Wiki page](http://www.zoneminder.com/wiki/index.php/How_to_get_ssmtp_working_with_Zoneminder)
+      Please visit the ZoneMinder [SSMTP Wiki page](https://wiki.zoneminder.com/How_to_get_ssmtp_working_with_Zoneminder)
       for setup and configuration help.
       `,
     type        => $types{boolean},

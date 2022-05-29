@@ -20,15 +20,16 @@
 #ifndef ZM_STREAM_H
 #define ZM_STREAM_H
 
+#include "zm_box.h"
 #include "zm_logger.h"
 #include "zm_mpeg.h"
+#include "zm_time.h"
 #include <memory>
 #include <sys/un.h>
 
 class Image;
 class Monitor;
 
-#define TV_2_FLOAT( tv ) ( double((tv).tv_sec) + (double((tv).tv_usec) / 1000000.0) )
 #define BOUNDARY "ZoneMinderFrame"
 
 class StreamBase {
@@ -40,10 +41,11 @@ public:
     STREAM_SINGLE,
     STREAM_MPEG
   } StreamType;
+  typedef enum { FRAME_NORMAL, FRAME_ANALYSIS } FrameType;
 
 protected:
-  static const int MAX_STREAM_DELAY = 5; // Seconds
-  static const int MAX_SLEEP_USEC = 500000; // .5 Seconds
+  static constexpr Seconds MAX_STREAM_DELAY = Seconds(5);
+  static constexpr Milliseconds MAX_SLEEP = Milliseconds(500);
 
   static const StreamType DEFAULT_TYPE = STREAM_JPEG;
   enum { DEFAULT_RATE=ZM_RATE_BASE };
@@ -88,6 +90,9 @@ protected:
     CMD_VARPLAY,
     CMD_GET_IMAGE,
     CMD_QUIT,
+    CMD_MAXFPS,
+    CMD_ANALYZE_ON,
+    CMD_ANALYZE_OFF,
     CMD_QUERY=99
   } MsgCommand;
 
@@ -96,13 +101,14 @@ protected:
   std::shared_ptr<Monitor> monitor;
 
   StreamType type;
+  FrameType   frame_type;
   const char *format;
   int replay_rate;
   int scale;
   int last_scale;
   int zoom;
   int last_zoom;
-  double maxfps;
+  Box last_crop;
   int bitrate;
   unsigned short last_x, last_y;
   unsigned short x, y;
@@ -119,21 +125,29 @@ protected:
   bool paused;
   int step;
 
-  struct timeval now;
-  struct timeval last_comm_update;
+  TimePoint now;
+  TimePoint last_comm_update;
 
-  double base_fps;
-  double effective_fps;
+  double maxfps;
+  double base_fps;        // Should be capturing fps, hence a rough target
+  double effective_fps;   // Target fps after taking max_fps into account
+  double actual_fps;      // sliding calculated actual streaming fps achieved
+  TimePoint last_fps_update;
+  int frame_count;      // Count of frames sent
+  int last_frame_count; // Used in calculating actual_fps from frame_count - last_frame_count
+
   int frame_mod;
 
-  double last_frame_sent;
-  struct timeval last_frame_timestamp;
+  TimePoint last_frame_sent;
+  SystemTimePoint last_frame_timestamp;
+  TimePoint when_to_send_next_frame;  // When to send next frame so if now < send_next_frame, skip
 
-#if HAVE_LIBAVCODEC   
   VideoStream *vid_stream;
-#endif // HAVE_LIBAVCODEC   
 
   CmdMsg msg;
+
+  unsigned char *temp_img_buffer;     // Used when encoding or sending file data
+  size_t temp_img_buffer_size;
 
 protected:
   bool loadMonitor(int monitor_id);
@@ -148,13 +162,13 @@ public:
     monitor_id(0),
     monitor(nullptr),
     type(DEFAULT_TYPE),
+    frame_type(FRAME_NORMAL),
     format(""),
     replay_rate(DEFAULT_RATE),
     scale(DEFAULT_SCALE),
     last_scale(DEFAULT_SCALE),
     zoom(DEFAULT_ZOOM),
     last_zoom(DEFAULT_ZOOM),
-    maxfps(DEFAULT_MAXFPS),
     bitrate(DEFAULT_BITRATE),
     last_x(0),
     last_y(0),
@@ -166,7 +180,16 @@ public:
     sd(-1),
     lock_fd(0),
     paused(false),
-    step(0)
+    step(0),
+    maxfps(DEFAULT_MAXFPS),
+    base_fps(0.0),
+    effective_fps(0.0),
+    actual_fps(0.0),
+    frame_count(0),
+    last_frame_count(0),
+    frame_mod(1),
+    temp_img_buffer(nullptr),
+    temp_img_buffer_size(0)
   {
     memset(&loc_sock_path, 0, sizeof(loc_sock_path));
     memset(&loc_addr, 0, sizeof(loc_addr));
@@ -174,15 +197,7 @@ public:
     memset(&rem_addr, 0, sizeof(rem_addr));
     memset(&sock_path_lock, 0, sizeof(sock_path_lock));
 
-    base_fps = 0.0;
-    effective_fps = 0.0;
-    frame_mod = 1;
-
-#if HAVE_LIBAVCODEC   
-    vid_stream = 0;
-#endif // HAVE_LIBAVCODEC   
-    last_frame_sent = 0.0;
-    last_frame_timestamp = (struct timeval){0};
+    vid_stream = nullptr;
     msg = { 0, { 0 } };
   }
   virtual ~StreamBase();
@@ -195,7 +210,9 @@ public:
       type = STREAM_RAW;
     }
 #endif
-
+  }
+  void setStreamFrameType(FrameType p_type) {
+    frame_type = p_type;
   }
   void setStreamFormat(const char *p_format) {
     format = p_format;
@@ -206,10 +223,11 @@ public:
       scale = DEFAULT_SCALE;
   }
   void setStreamReplayRate(int p_rate) {
-    Debug(2, "Setting replay_rate %d", p_rate);
+    Debug(1, "Setting replay_rate %d", p_rate);
     replay_rate = p_rate;
   }
   void setStreamMaxFPS(double p_maxfps) {
+    Debug(1, "Setting max fps to %f", p_maxfps);
     maxfps = p_maxfps;
   }
   void setStreamBitrate(int p_bitrate) {

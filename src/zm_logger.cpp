@@ -20,17 +20,20 @@
 #include "zm_logger.h"
 
 #include "zm_db.h"
+#include "zm_time.h"
 #include "zm_utils.h"
-#include <csignal>
-#include <cstdarg>
-#include <cstring>
 #include <libgen.h>
 #include <syslog.h>
-#include <sys/time.h>
+#include <unistd.h>
 
 #ifdef __FreeBSD__
 #include <sys/thr.h>
 #endif
+#include <cerrno>
+#include <csignal>
+#include <cstdarg>
+#include <cstring>
+
 
 bool Logger::smInitialised = false;
 Logger *Logger::smInstance = nullptr;
@@ -40,11 +43,11 @@ Logger::IntMap Logger::smSyslogPriorities;
 
 void Logger::usrHandler(int sig) {
   Logger *logger = fetch();
-  if ( sig == SIGUSR1 )
+  if (sig == SIGUSR1)
     logger->level(logger->level()+1);
-  else if ( sig == SIGUSR2 )
+  else if (sig == SIGUSR2)
     logger->level(logger->level()-1);
-  Info("Logger - Level changed to %d", logger->level());
+  Info("Logger - Level changed to %d %s", logger->level(), smCodes[logger->level()].c_str());
 }
 
 Logger::Logger() :
@@ -56,16 +59,15 @@ Logger::Logger() :
   mEffectiveLevel(NOLOG),
   mDbConnected(false),
   mLogPath(staticConfig.PATH_LOGS.c_str()),
-  //mLogFile( mLogPath+"/"+mId+".log" ),
+  //  mLogFile( mLogPath+"/"+mId+".log" ),
   mLogFileFP(nullptr),
   mHasTerminal(false),
   mFlush(false) {
-
-  if ( smInstance ) {
+  if (smInstance) {
     Panic("Attempt to create second instance of Logger class");
   }
 
-  if ( !smInitialised ) {
+  if (!smInitialised) {
     smCodes[INFO] = "INF";
     smCodes[WARNING] = "WAR";
     smCodes[ERROR] = "ERR";
@@ -80,16 +82,16 @@ Logger::Logger() :
     smSyslogPriorities[PANIC] = LOG_ERR;
 
     char code[4] = "";
-    for ( int i = DEBUG1; i <= DEBUG9; i++ ) {
+    for (int i = DEBUG1; i <= DEBUG9; i++) {
       snprintf(code, sizeof(code), "DB%d", i);
       smCodes[i] = code;
       smSyslogPriorities[i] = LOG_DEBUG;
     }
 
     smInitialised = true;
-  }
+  }  // end if ! smInitialised
 
-  if ( fileno(stderr) && isatty(fileno(stderr)) ) {
+  if (fileno(stderr) && isatty(fileno(stderr))) {
     mHasTerminal = true;
     mTerminalLevel = WARNING;
   }
@@ -100,14 +102,6 @@ Logger::~Logger() {
   smCodes.clear();
   smSyslogPriorities.clear();
   smInitialised = false;
-#if 0
-  for ( StringMap::iterator itr = smCodes.begin(); itr != smCodes.end(); itr ++ ) {
-      smCodes.erase( itr );
-  }
-  for ( IntMap::iterator itr = smSyslogPriorities.begin(); itr != smSyslogPriorities.end(); itr ++ ) {
-      smSyslogPriorities.erase(itr);
-  }
-#endif
 }
 
 void Logger::initialise(const std::string &id, const Options &options) {
@@ -132,24 +126,24 @@ void Logger::initialise(const std::string &id, const Options &options) {
 
   Level tempLevel = INFO;
   Level tempTerminalLevel = mTerminalLevel;
-  Level tempDatabaseLevel = mDatabaseLevel;
-  Level tempFileLevel = mFileLevel;
-  Level tempSyslogLevel = mSyslogLevel;
 
   if ( options.mTerminalLevel != NOOPT )
     tempTerminalLevel = options.mTerminalLevel;
 
-  // DEBUG1 == 1.  So >= DEBUG1, we set to DEBUG9?! Why?
+  // DEBUG1 == 1.  So >= DEBUG1, we set to DEBUG9?! Why? icon: because log_level_database only goes up to debug.
+  Level tempDatabaseLevel;
   if ( options.mDatabaseLevel != NOOPT )
     tempDatabaseLevel = options.mDatabaseLevel;
   else
     tempDatabaseLevel = config.log_level_database >= DEBUG1 ? DEBUG9 : config.log_level_database;
 
+  Level tempFileLevel;
   if ( options.mFileLevel != NOOPT )
     tempFileLevel = options.mFileLevel;
   else
     tempFileLevel = config.log_level_file >= DEBUG1 ? DEBUG9 : config.log_level_file;
 
+  Level tempSyslogLevel;
   if ( options.mSyslogLevel != NOOPT )
     tempSyslogLevel = options.mSyslogLevel;
   else
@@ -172,7 +166,7 @@ void Logger::initialise(const std::string &id, const Options &options) {
     tempSyslogLevel = atoi(envPtr);
 
   if ( config.log_debug ) {
-    StringVector targets = split(config.log_debug_target, "|");
+    StringVector targets = Split(config.log_debug_target, "|");
     for ( unsigned int i = 0; i < targets.size(); i++ ) {
       const std::string &target = targets[i];
       if ( target == mId || target == "_"+mId || target == "_"+mIdRoot || target == "" ) {
@@ -184,7 +178,7 @@ void Logger::initialise(const std::string &id, const Options &options) {
           }
         }
       }
-    } // end foreach target
+    }  // end foreach target
   } else {
     // if we don't have debug turned on, then the max effective log level is INFO
     if ( tempSyslogLevel > INFO ) tempSyslogLevel = INFO;
@@ -192,7 +186,7 @@ void Logger::initialise(const std::string &id, const Options &options) {
     if ( tempTerminalLevel > INFO ) tempTerminalLevel = INFO;
     if ( tempDatabaseLevel > INFO ) tempDatabaseLevel = INFO;
     if ( tempLevel > INFO ) tempLevel = INFO;
-  } // end if config.log_debug
+  }  // end if config.log_debug
 
   logFile(tempLogFile);
 
@@ -302,25 +296,23 @@ const std::string &Logger::id(const std::string &id) {
 }
 
 Logger::Level Logger::level(Logger::Level level) {
-  if ( level > NOOPT ) {
-    level = limit(level);
-    if ( mLevel != level )
-      mLevel = level;
+  if (level > NOOPT) {
+    mLevel = limit(level);
 
     mEffectiveLevel = NOLOG;
-    if ( mTerminalLevel > mEffectiveLevel )
+    if (mTerminalLevel > mEffectiveLevel)
       mEffectiveLevel = mTerminalLevel;
-    if ( mDatabaseLevel > mEffectiveLevel )
+    if (mDatabaseLevel > mEffectiveLevel)
       mEffectiveLevel = mDatabaseLevel;
-    if ( mFileLevel > mEffectiveLevel )
+    if (mFileLevel > mEffectiveLevel)
       mEffectiveLevel = mFileLevel;
-    if ( mSyslogLevel > mEffectiveLevel )
+    if (mSyslogLevel > mEffectiveLevel)
       mEffectiveLevel = mSyslogLevel;
-    if ( mEffectiveLevel > mLevel)
+    if (mEffectiveLevel > mLevel)
       mEffectiveLevel = mLevel;
 
     // DEBUG levels should flush
-    if ( mLevel > INFO )
+    if (mLevel > INFO)
       mFlush = true;
   }
   return mLevel;
@@ -330,9 +322,7 @@ Logger::Level Logger::terminalLevel(Logger::Level terminalLevel) {
   if ( terminalLevel > NOOPT ) {
     if ( !mHasTerminal )
       terminalLevel = NOLOG;
-    terminalLevel = limit(terminalLevel);
-    if ( mTerminalLevel != terminalLevel )
-      mTerminalLevel = terminalLevel;
+    mTerminalLevel = limit(terminalLevel);
   }
   return mTerminalLevel;
 }
@@ -354,11 +344,11 @@ Logger::Level Logger::databaseLevel(Logger::Level databaseLevel) {
 }
 
 Logger::Level Logger::fileLevel(Logger::Level fileLevel) {
-  if ( fileLevel > NOOPT ) {
+  if (fileLevel > NOOPT) {
     fileLevel = limit(fileLevel);
     // Always close, because we may have changed file names
-    if ( mFileLevel > NOLOG )
-	    closeFile();
+    if (mFileLevel > NOLOG)
+      closeFile();
     mFileLevel = fileLevel;
     // Don't try to open it here because it will create the log file even if we never write to it.
   }
@@ -366,13 +356,13 @@ Logger::Level Logger::fileLevel(Logger::Level fileLevel) {
 }
 
 Logger::Level Logger::syslogLevel(Logger::Level syslogLevel) {
-  if ( syslogLevel > NOOPT ) {
+  if (syslogLevel > NOOPT) {
     syslogLevel = limit(syslogLevel);
-    if ( mSyslogLevel != syslogLevel ) {
-      if ( mSyslogLevel > NOLOG )
+    if (mSyslogLevel != syslogLevel) {
+      if (mSyslogLevel > NOLOG)
         closeSyslog();
       mSyslogLevel = syslogLevel;
-      if ( mSyslogLevel > NOLOG )
+      if (mSyslogLevel > NOLOG)
         openSyslog();
     }
   }
@@ -382,31 +372,31 @@ Logger::Level Logger::syslogLevel(Logger::Level syslogLevel) {
 void Logger::logFile(const std::string &logFile) {
   bool addLogPid = false;
   std::string tempLogFile = logFile;
-  if ( tempLogFile[tempLogFile.length()-1] == '+' ) {
+  if (tempLogFile[tempLogFile.length()-1] == '+') {
     tempLogFile.resize(tempLogFile.length()-1);
     addLogPid = true;
   }
-  if ( addLogPid )
+  if (addLogPid)
     mLogFile = stringtf("%s.%05d", tempLogFile.c_str(), getpid());
   else
     mLogFile = tempLogFile;
 }
 
 void Logger::openFile() {
-  if ( mLogFile.size() ) {
-   if ( (mLogFileFP = fopen(mLogFile.c_str(), "a")) == nullptr ) {
-    mFileLevel = NOLOG;
-    Error("fopen() for %s, error = %s", mLogFile.c_str(), strerror(errno));
-   }
+  if (mLogFile.size()) {
+    if ( (mLogFileFP = fopen(mLogFile.c_str(), "a")) == nullptr ) {
+      mFileLevel = NOLOG;
+      Error("fopen() for %s, error = %s", mLogFile.c_str(), strerror(errno));
+    }
   } else {
     puts("Called Logger::openFile() without a filename");
   }
 }
 
 void Logger::closeFile() {
-  if ( mLogFileFP ) {
+  if (mLogFileFP) {
     fflush(mLogFileFP);
-    if ( fclose(mLogFileFP) < 0 ) {
+    if (fclose(mLogFileFP) < 0) {
       mLogFileFP = nullptr;
       Error("fclose(), error = %s", strerror(errno));
     }
@@ -415,7 +405,6 @@ void Logger::closeFile() {
 }
 
 void Logger::closeDatabase() {
-
 }
 
 void Logger::openSyslog() {
@@ -426,42 +415,30 @@ void Logger::closeSyslog() {
   (void) closelog();
 }
 
-void Logger::logPrint(bool hex, const char * const filepath, const int line, const int level, const char *fstring, ...) {
-  
-  if ( level > mEffectiveLevel ) {
-    return;
-  }
+void Logger::logPrint(bool hex, const char *filepath, int line, int level, const char *fstring, ...) {
+  if (level > mEffectiveLevel) return;
+  if (level < PANIC || level > DEBUG9)
+    Panic("Invalid logger level %d", level);
     
   log_mutex.lock();
+  // Can we save some cycles by having these as members and not allocate them on the fly? I think so.
   char            timeString[64];
-  char            logString[8192];
+  char            logString[4096]; // SQL TEXT can hold 64k so we could go up to 32k here but why?
   va_list         argPtr;
-  struct timeval  timeVal;
 
-  char *filecopy = strdup(filepath);
-  const char * const file = basename(filecopy);
+  const char *base = strrchr(filepath, '/');
+  const char *file = base ? base+1 : filepath;
   const char *classString = smCodes[level].c_str();
 
-  if ( level < PANIC || level > DEBUG9 )
-    Panic("Invalid logger level %d", level);
+  SystemTimePoint now = std::chrono::system_clock::now();
+  time_t now_sec = std::chrono::system_clock::to_time_t(now);
+  Microseconds now_frac = std::chrono::duration_cast<Microseconds>(
+      now.time_since_epoch() - std::chrono::duration_cast<Seconds>(now.time_since_epoch()));
 
-  gettimeofday(&timeVal, nullptr);
-
-#if 0
-  if ( logRuntime ) {
-    static struct timeval logStart;
-
-    subtractTime( &timeVal, &logStart );
-
-    snprintf( timeString, sizeof(timeString), "%ld.%03ld", timeVal.tv_sec, timeVal.tv_usec/1000 );
-  } else {
-#endif
-    char *timePtr = timeString;
-    timePtr += strftime(timePtr, sizeof(timeString), "%x %H:%M:%S", localtime(&timeVal.tv_sec));
-    snprintf(timePtr, sizeof(timeString)-(timePtr-timeString), ".%06ld", timeVal.tv_usec);
-#if 0
-  }
-#endif
+  char *timePtr = timeString;
+  tm now_tm = {};
+  timePtr += strftime(timePtr, sizeof(timeString), "%x %H:%M:%S", localtime_r(&now_sec, &now_tm));
+  snprintf(timePtr, sizeof(timeString) - (timePtr - timeString), ".%06" PRIi64, static_cast<int64>(now_frac.count()));
 
   pid_t tid;
 #ifdef __FreeBSD__
@@ -473,12 +450,12 @@ void Logger::logPrint(bool hex, const char * const filepath, const int line, con
 #else
   #ifdef HAVE_SYSCALL
     #ifdef __FreeBSD_kernel__
-    if ( (syscall(SYS_thr_self, &tid)) < 0 ) // Thread/Process id
+    if ((syscall(SYS_thr_self, &tid)) < 0)  // Thread/Process id
 
     # else
       // SOLARIS doesn't have SYS_gettid; don't assume
       #ifdef SYS_gettid
-    if ( (tid = syscall(SYS_gettid)) < 0 ) // Thread/Process id
+    if ((tid = syscall(SYS_gettid)) < 0)  // Thread/Process id
       #endif // SYS_gettid
     #endif
   #endif // HAVE_SYSCALL
@@ -510,75 +487,68 @@ void Logger::logPrint(bool hex, const char * const filepath, const int line, con
   }
   va_end(argPtr);
   char *syslogEnd = logPtr;
+
+  if ( static_cast<size_t>(logPtr - logString) >= sizeof(logString) ) {
+    // vsnprintf won't exceed the the buffer, but it might hit the end.
+    logPtr = logString + sizeof(logString)-3;
+  }
   strncpy(logPtr, "]\n", sizeof(logString)-(logPtr-logString));
 
-  if ( level <= mTerminalLevel ) {
+  if (level <= mTerminalLevel) {
     puts(logString);
     fflush(stdout);
   }
 
-  if ( level <= mFileLevel ) {
-    if ( !mLogFileFP ) {
+  if (level <= mFileLevel) {
+    if (!mLogFileFP) {
+      // FIXME unlocking here is a problem. Another thread could sneak in.
+      // We are using a recursive mutex so unlocking shouldn't be neccessary
+      //log_mutex.unlock();
       // We do this here so that we only create the file if we ever write to it.
-      log_mutex.unlock();
       openFile();
-      log_mutex.lock();
+      //log_mutex.lock();
     }
-    if ( mLogFileFP ) {
+    if (mLogFileFP) {
       fputs(logString, mLogFileFP);
-      if ( mFlush )
-        fflush(mLogFileFP);
-    } else {
-      puts("Logging to file, but failed to open it\n");
+      if (mFlush) fflush(mLogFileFP);
+    } else if (mTerminalLevel != NOLOG) {
+      puts("Logging to file but failed to open it\n");
     }
   }  // end if level <= mFileLevel
 
-  if ( level <= mDatabaseLevel ) {
-    if (db_mutex.try_lock_for(1)) {
-      char escapedString[(strlen(syslogStart)*2)+1];
-      mysql_real_escape_string(&dbconn, escapedString, syslogStart, strlen(syslogStart));
+  if (level <= mDatabaseLevel) {
+    if (zmDbConnected) {
+      std::string escapedString = zmDbEscapeString({syslogStart, syslogEnd});
 
-      char sql[ZM_SQL_MED_BUFSIZ];
-      snprintf(sql, sizeof(sql),
+      std::string sql_string = stringtf(
           "INSERT INTO `Logs` "
           "( `TimeKey`, `Component`, `ServerId`, `Pid`, `Level`, `Code`, `Message`, `File`, `Line` )"
-         " VALUES "
-         "( %ld.%06ld, '%s', %d, %d, %d, '%s', '%s', '%s', %d )",
-         timeVal.tv_sec, timeVal.tv_usec, mId.c_str(), staticConfig.SERVER_ID, tid, level, classString, escapedString, file, line
-         );
-      if ( mysql_query(&dbconn, sql) ) {
-        Level tempDatabaseLevel = mDatabaseLevel;
-        databaseLevel(NOLOG);
-        Error("Can't insert log entry: sql(%s) error(%s)", sql, mysql_error(&dbconn));
-        databaseLevel(tempDatabaseLevel);
-      }
-      db_mutex.unlock();
+          " VALUES "
+          "( %ld.%06" PRIi64 ", '%s', %d, %d, %d, '%s', '%s', '%s', %d )",
+          now_sec, static_cast<int64>(now_frac.count()), mId.c_str(), staticConfig.SERVER_ID, tid, level, classString,
+          escapedString.c_str(), file, line);
+      dbQueue.push(std::move(sql_string));
     } else {
-      Level tempDatabaseLevel = mDatabaseLevel;
-      databaseLevel(NOLOG);
-      Error("Can't insert log entry since the DB lock could not be obtained. Message: %s", syslogStart);
-      databaseLevel(tempDatabaseLevel);
+      puts("Db is closed");
     }
   }  // end if level <= mDatabaseLevel
 
-  if ( level <= mSyslogLevel ) {
+  if (level <= mSyslogLevel) {
     *syslogEnd = '\0';
     syslog(smSyslogPriorities[level], "%s [%s] [%s]", classString, mId.c_str(), syslogStart);
   }
 
-  free(filecopy);
   log_mutex.unlock();
-  if ( level <= FATAL ) {
+  if (level <= FATAL) {
     logTerm();
     zmDbClose();
-    if ( level <= PANIC )
-      abort();
+    if (level <= PANIC) abort();
     exit(-1);
   }
 }  // end logPrint
 
 void logInit(const char *name, const Logger::Options &options) {
-  if ( Logger::smInstance ) {
+  if (Logger::smInstance) {
     delete Logger::smInstance;
     Logger::smInstance = nullptr;
   }
@@ -588,7 +558,7 @@ void logInit(const char *name, const Logger::Options &options) {
 }
 
 void logTerm() {
-  if ( Logger::smInstance ) {
+  if (Logger::smInstance) {
     delete Logger::smInstance;
     Logger::smInstance = nullptr;
   }

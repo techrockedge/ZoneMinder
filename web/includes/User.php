@@ -9,7 +9,7 @@ class User extends ZM_Object {
 
 	protected $defaults = array(
 			'Id'              => null,
-      'Username'        => '',
+      'Username'        => array('type'=>'text','filter_regexp'=>'/[^\w\.@ ]/'),
       'Password'        => '',
       'Language'        => '',
       'Enabled'         => 1,
@@ -19,11 +19,13 @@ class User extends ZM_Object {
       'Monitors'        => 'None',
       'Groups'          => 'None',
       'Devices'         => 'None',
+      'Snapshots'       => 'None',
       'System'          => 'None',
       'MaxBandwidth'    => '',
       'MonitorIds'      => '',
       'TokenMinExpiry'  => 0,
       'APIEnabled'      => 1,
+      'HomeView'        => '',
 			);
 
   public static function find( $parameters = array(), $options = array() ) {

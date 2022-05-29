@@ -146,15 +146,15 @@ xhtmlHeaders(__FILE__, translate('CycleWatch'));
       </div>
       <div id="sizeControl">
         <span id="widthControl">
-          <label><?php echo translate('Width') ?>:</label>
+          <label><?php echo translate('Width') ?></label>
           <?php echo htmlSelect('width', $widths, $options['width'], array('id'=>'width', 'data-on-change-this'=>'changeSize') ); ?>
         </span>
         <span id="heightControl">
-          <label><?php echo translate('Height') ?>:</label>
+          <label><?php echo translate('Height') ?></label>
           <?php echo htmlSelect('height', $heights, $options['height'], array('id'=>'height', 'data-on-change-this'=>'changeSize') ); ?>
         </span>
         <span id="scaleControl">
-          <label><?php echo translate('Scale') ?>:</label>
+          <label><?php echo translate('Scale') ?></label>
           <?php echo htmlSelect('scale', $scales, $options['scale'], array('id'=>'scale', 'data-on-change-this'=>'changeScale') ); ?>
         </span>
       </div>
@@ -172,7 +172,7 @@ xhtmlHeaders(__FILE__, translate('CycleWatch'));
         </nav>
         <div class="container-fluid col-sm-offset-2 h-100 pr-0">
 
-          <div id="imageFeed">
+          <div id="imageFeed<?php echo $monitor->Id() ?>" class="imageFeed">
           <?php 
             if ( $monitor ) {
               echo getStreamHTML($monitor, $options);
@@ -192,4 +192,13 @@ xhtmlHeaders(__FILE__, translate('CycleWatch'));
         </div>
       </div>
     </div>
+<script src="<?php echo cache_bust('js/adapter.min.js') ?>"></script>
+<?php
+if ( $monitor->JanusEnabled() ) {
+?>
+  <script src="/javascript/janus/janus.js"></script>
+<?php
+}
+?>
+  <script src="<?php echo cache_bust('js/MonitorStream.js') ?>"></script>
 <?php xhtmlFooter() ?>

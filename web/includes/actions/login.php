@@ -75,22 +75,20 @@ if ( ('login' == $action) && isset($_REQUEST['username']) && ( ZM_AUTH_TYPE == '
 
   // if captcha existed, it was passed
 
-  if ( ! isset($user) ) {
+  if (!isset($user) ) {
     $_SESSION['loginFailed'] = true;
     return;
   }
 
-  $close_session = 0;
-  if ( !is_session_started() ) {
-    zm_session_start();
-    $close_session = 1;
-  }
+  if (is_session_started()) session_write_close();
+  zm_session_clear();
+  zm_session_regenerate_id(); # starts session
 
   $username = $_REQUEST['username'];
   $password = $_REQUEST['password'];
 
   ZM\Info("Login successful for user \"$username\"");
-  $password_type = password_type($password);
+  $password_type = password_type($user['Password']);
 
   if ( $password_type == 'mysql' or $password_type == 'mysql+bcrypt' ) {
     ZM\Info('Migrating password, if possible for future logins');
@@ -105,10 +103,9 @@ if ( ('login' == $action) && isset($_REQUEST['username']) && ( ZM_AUTH_TYPE == '
     // Need to save this in session, can't use the value in User because it is hashed
     $_SESSION['password'] = $_REQUEST['password'];
   }
-  zm_session_regenerate_id();
+  $_SESSION['remoteAddr'] = $_SERVER['REMOTE_ADDR'];
   generateAuthHash(ZM_AUTH_HASH_IPS, true);
-  if ( $close_session )
-    session_write_close();
+  session_write_close();
 
   $view = 'postlogin';
 } # end if doing a login action

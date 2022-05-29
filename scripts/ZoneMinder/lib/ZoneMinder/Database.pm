@@ -107,6 +107,7 @@ sub zmDbConnect {
         .$socket . $sslOptions . ($options?join(';', '', map { $_.'='.$$options{$_} } keys %{$options} ) : '')
         , $ZoneMinder::Config::Config{ZM_DB_USER}
         , $ZoneMinder::Config::Config{ZM_DB_PASS}
+        , { mysql_enable_utf8 => 1, }
         );
     };
     if ( !$dbh or $@ ) {
@@ -202,27 +203,13 @@ sub zmDbGetMonitor {
     return undef ;
   }
 
-  my $sql = 'SELECT * FROM Monitors WHERE Id = ?';
-  my $sth = $dbh->prepare_cached($sql);
-  if ( !$sth ) {
-    Error("Can't prepare '$sql': ".$dbh->errstr());
-    return undef;
-  }
-  my $res = $sth->execute($id);
-  if ( !$res ) {
-    Error("Can't execute '$sql': ".$sth->errstr());
-    return undef;
-  }
-  my $monitor = $sth->fetchrow_hashref();
-  $sth->finish();
-  return $monitor;
+  return zmDbFetchOne('SELECT * FROM Monitors WHERE Id = ?', $id);
 }
 
 sub zmDbGetMonitorAndControl {
   zmDbConnect();
 
   my $id = shift;
-
   return undef if !defined($id);
 
   my $sql = 'SELECT C.*,M.*,C.Protocol
@@ -230,19 +217,7 @@ sub zmDbGetMonitorAndControl {
     INNER JOIN Controls as C on (M.ControlId = C.Id)
     WHERE M.Id = ?'
     ;
-  my $sth = $dbh->prepare_cached($sql);
-  if ( !$sth ) {
-    Error("Can't prepare '$sql': ".$dbh->errstr());
-    return undef;
-  }
-  my $res = $sth->execute( $id );
-  if ( !$res ) {
-    Error("Can't execute '$sql': ".$sth->errstr());
-    return undef;
-  }
-  my $monitor = $sth->fetchrow_hashref();
-  $sth->finish();
-  return $monitor;
+  return zmDbFetchOne($sql);
 }
 
 sub start_transaction {
@@ -266,15 +241,35 @@ sub end_transaction {
 } # end sub end_transaction
 
 # Basic execution of $dbh->do but with some pretty logging of the sql on error.
-# Returns 1 on success, 0 on error
 sub zmDbDo {
 	my $sql = shift;
-	if ( ! $dbh->do($sql, undef, @_) ) {
+  my $rows = $dbh->do($sql, undef, @_);
+	if ( ! defined $rows ) {
 		$sql =~ s/\?/'%s'/;
 		Error(sprintf("Failed $sql :", @_).$dbh->errstr());
-    return 0;
+  } elsif ( ZoneMinder::Logger::logLevel() > INFO ) {
+		$sql =~ s/\?/'%s'/;
+		Debug(sprintf("Succeeded $sql : $rows rows affected", @_));
 	}
-  return 1;
+  return $rows;
+}
+
+sub zmDbFetchOne {
+  my $sql = shift;
+
+  my $sth = $dbh->prepare_cached($sql);
+  if (!$sth) {
+    Error("Can't prepare '$sql': ".$dbh->errstr());
+    return undef;
+  }
+  my $res = $sth->execute(@_);
+  if (!$res) {
+    Error("Can't execute '$sql': ".$sth->errstr());
+    return undef;
+  }
+  my $row = $sth->fetchrow_hashref();
+  $sth->finish();
+  return $row;
 }
 
 1;
@@ -299,6 +294,7 @@ zmDbGetMonitors
 zmDbGetMonitor
 zmDbGetMonitorAndControl
 zmDbDo
+zmDbFetchOne
 
 =head1 AUTHOR
 

@@ -1,139 +1,103 @@
 /**
  * called when the layoutControl select element is changed, or the page
  * is rendered
- * @param {*} element - the event data passed by onchange callback
+ * @param {*} new_layout_id - the id of a layout to switch to
  */
-function selectLayout(element) {
-  var ddm = $j('#zmMontageLayout');
-  layout = ddm.val();
-
-  if ( layout_id = parseInt(layout) ) {
-    layout = layouts[layout];
-
-    for ( var i = 0, length = monitors.length; i < length; i++ ) {
-      monitor = monitors[i];
-      // Need to clear the current positioning, and apply the new
-
-      monitor_frame = $j('#monitorFrame'+monitor.id);
-      if ( !monitor_frame ) {
-        console.log('Error finding frame for ' + monitor.id);
-        continue;
-      }
-
-      // Apply default layout options, like float left
-      if ( layout.Positions['default'] ) {
-        styles = layout.Positions['default'];
-        for ( style in styles ) {
-          console.log("Applying " + style + ' ' + styles[style]);
-          monitor_frame.css(style, styles[style]);
-        }
-      } else {
-        console.log("No default styles to apply" + layout.Positions);
-      } // end if default styles
-
-      if ( layout.Positions['mId'+monitor.id] ) {
-        styles = layout.Positions['mId'+monitor.id];
-        for ( style in styles ) {
-          monitor_frame.css(style, styles[style]);
-        }
-      } else {
-        console.log("No Monitor styles to apply");
-      } // end if specific monitor style
-    } // end foreach monitor
-  } // end if a stored layout
-  if ( ! layout ) {
+function selectLayout(new_layout_id) {
+  const ddm = $j('#zmMontageLayout');
+  if (new_layout_id && (typeof(new_layout_id) != 'object')) {
+    console.log("Selecting " + new_layout_id);
+    ddm.val(new_layout_id);
+  }
+  const layout_id = parseInt(ddm.val());
+  if (!layout_id) {
+    console.log("No layout_id?!");
     return;
   }
-  setCookie('zmMontageLayout', layout_id, 3600);
-  if ( layouts[layout_id].Name != 'Freeform' ) { // 'montage_freeform.css' ) {
-    setCookie('zmMontageScale', '', 3600);
-    $j('#scale').val('');
-    $j('#width').val('0');
-  } else {
-    // Is freeform, we don't touch the width/height/scale settings, but we may need to update sizing and scales
+
+  const layout = layouts[layout_id];
+  if (!layout) {
+    console.log("No layout found for " + layout_id);
+    return;
   }
-  var width = parseInt($j('#width').val());
-  var height = parseInt($j('#height').val());
-  var scale = $j('#scale').val();
 
-  for ( var i = 0, length = monitors.length; i < length; i++ ) {
-    var monitor = monitors[i];
+  for (var i = 0, length = monitors.length; i < length; i++) {
+    monitor = monitors[i];
+    // Need to clear the current positioning, and apply the new
 
-    if ( scale ) {
-      stream_scale = scale;
-    } else if ( width ) {
-      stream_scale = parseInt(100*width/monitor.width);
-    } else if ( height ) {
-      stream_scale = parseInt(100*height/monitor.height);
-    }
-    var streamImg = document.getElementById('liveStream'+monitor.id);
-    if ( streamImg ) {
-      if ( streamImg.nodeName == 'IMG' ) {
-        var src = streamImg.src;
-        src = src.replace(/scale=\d*/i, 'scale='+scale);
-        if ( height == '0' ) {
-          streamImg.style.height = 'auto';
-        }
-        if ( src != streamImg.src ) {
-          streamImg.src = '';
-          streamImg.src = src;
-        }
-      } else if ( streamImg.nodeName == 'APPLET' || streamImg.nodeName == 'OBJECT' ) {
-        // APPLET's and OBJECTS need to be re-initialized
-      }
-      streamImg.style.width = '100%';
-    }
-  } // end foreach monitor
-} // end function selectLayout(element)
-
-/**
- * called when the widthControl|heightControl select elements are changed
- */
-function changeSize() {
-  var width = parseInt($j('#width').val());
-  var height = parseInt($j('#height').val());
-
-  for ( var i = 0, length = monitors.length; i < length; i++ ) {
-    var monitor = monitors[i];
-
-    // Scale the frame
-    monitor_frame = $j('#monitorFrame'+monitor.id);
-    if ( !monitor_frame ) {
-      console.log("Error finding frame for " + monitor.id);
+    monitor_frame = $j('#monitor'+monitor.id);
+    if (!monitor_frame) {
+      console.log('Error finding frame for ' + monitor.id);
       continue;
     }
-    monitor_frame.css('width', ( width ? width+'px' : 'auto'));
-    monitor_frame.css('height', ( height ? height+'px' : 'auto'));
 
-    /*Stream could be an applet so can't use moo tools*/
-    var streamImg = document.getElementById('liveStream'+monitor.id);
-    if ( streamImg ) {
-      if ( streamImg.nodeName == 'IMG' ) {
-        var src = streamImg.src;
-        streamImg.src = '';
-        var scale = 100;
-        if ( width ) {
-          scale = parseInt(100*width/monitor.width);
-        } else if ( height ) {
-          scale = parseInt(100*height/monitor.height);
-        }
-        // Note zms ignores width and height
-        src = src.replace(/scale=\d*/i, 'scale='+scale);
-
-        src = src.replace(/rand=\d+/i, 'rand='+Math.floor((Math.random() * 1000000) ));
-        streamImg.src = src;
+    // Apply default layout options, like float left
+    if (layout.Positions['default']) {
+      styles = layout.Positions['default'];
+      for (style in styles) {
+        monitor_frame.css(style, styles[style]);
       }
-      streamImg.style.width = width ? width+'px' : null;
-      streamImg.style.height = height ? height+'px' : null;
-      //streamImg.style.height = '';
-    }
+    } else {
+      console.log("No default styles to apply" + layout.Positions);
+    } // end if default styles
+
+    if (layout.Positions['mId'+monitor.id]) {
+      styles = layout.Positions['mId'+monitor.id];
+      for (style in styles) {
+        monitor_frame.css(style, styles[style]);
+      }
+    } // end if specific monitor style
+  } // end foreach monitor
+  setCookie('zmMontageLayout', layout_id, 3600);
+  if (layouts[layout_id].Name != 'Freeform') { // 'montage_freeform.css' ) {
+    // For freeform, we don't touch the width/height/scale settings, but we may need to update sizing and scales
+    setCookie('zmMontageScale', '0', 3600);
+    setCookie('zmMontageWidth', 'auto', 3600);
+    //setCookie('zmMontageHeight', 'auto', 3600);
+    $j('#scale').val('0');
+    $j('#width').val('auto');
+    //$j('#height').val('auto');
   }
-  $j('#scale').val('');
-  setCookie('zmMontageScale', '', 3600);
+
+  var width = $j('#width').val();
+  var height = $j('#height').val();
+  var scale = $j('#scale').val();
+  for (var i = 0, length = monitors.length; i < length; i++) {
+    var monitor = monitors[i];
+    monitor.setScale(scale, width, height);
+  } // end foreach monitor
+  console.log("Done selectLayout");
+} // end function selectLayout(element)
+
+function changeHeight() {
+  var height = $j('#height').val();
+  setCookie('zmMontageHeight', height, 3600);
+  for (var i = 0, length = monitors.length; i < length; i++) {
+    var monitor = monitors[i];
+    monitor_frame = $j('#monitor'+monitor.id + " .monitorStream");
+    monitor_frame.css('height', height);
+  }
+}
+
+/**
+ * called when the widthControl select element is changed
+ */
+function changeWidth() {
+  var width = $j('#width').val();
+  var height = $j('#height').val();
+  console.log("changeWidth");
+
+  selectLayout(freeform_layout_id);
+  $j('#width').val(width);
+  $j('#height').val(height);
+
+  for (var i = 0, length = monitors.length; i < length; i++) {
+    monitors[i].setScale('0', width, height);
+  }
+  $j('#scale').val('0');
+  setCookie('zmMontageScale', '0', 3600);
   setCookie('zmMontageWidth', width, 3600);
   setCookie('zmMontageHeight', height, 3600);
-  $j("#zmMontageLayout option:selected").removeAttr("selected");
-  //selectLayout('#zmMontageLayout');
 } // end function changeSize()
 
 /**
@@ -141,60 +105,17 @@ function changeSize() {
  */
 function changeScale() {
   var scale = $j('#scale').val();
-  $j('#width').val('0'); //auto
-  $j('#height').val('0'); //auto
+  selectLayout(freeform_layout_id); // Will also clear width and height
+  $j('#scale').val(scale);
   setCookie('zmMontageScale', scale, 3600);
-  setCookie('zmMontageWidth', '', 3600);
-  setCookie('zmMontageHeight', '', 3600);
-  if ( scale == '' ) {
-    selectLayout('#zmMontageLayout');
-    return;
-  }
+  setCookie('zmMontageWidth', 'auto', 3600);
+  setCookie('zmMontageHeight', 'auto', 3600);
+  $j('#width').val('auto');
+  $j('#height').val('auto');
+
   for ( var i = 0, length = monitors.length; i < length; i++ ) {
     var monitor = monitors[i];
-    var newWidth = ( monitorData[i].width * scale ) / SCALE_BASE;
-    var newHeight = ( monitorData[i].height * scale ) / SCALE_BASE;
-
-    // Scale the frame
-    monitor_frame = $j('#monitorFrame'+monitor.id);
-    if ( !monitor_frame ) {
-      console.log("Error finding frame for " + monitor.id);
-      continue;
-    }
-    if ( scale != '0' ) {
-      if ( newWidth ) {
-        monitor_frame.css('width', newWidth);
-      }
-    } else {
-      monitor_frame.css('width', '100%');
-    }
-    // We don't set the frame height because it has the status bar as well
-    //if ( height ) {
-    ////monitor_frame.css('height', height+'px');
-    //}
-    /*Stream could be an applet so can't use moo tools*/
-    var streamImg = $j('#liveStream'+monitor.id)[0];
-    if ( streamImg ) {
-      if ( streamImg.nodeName == 'IMG' ) {
-        var src = streamImg.src;
-        streamImg.src = '';
-
-        //src = src.replace(/rand=\d+/i,'rand='+Math.floor((Math.random() * 1000000) ));
-        if ( scale != '0' ) {
-          src = src.replace(/scale=[\.\d]+/i, 'scale='+scale);
-        } else {
-          src = src.replace(/scale=[\.\d]+/i, 'scale=100');
-        }
-        streamImg.src = src;
-      }
-      if ( scale != '0' ) {
-        streamImg.style.width = newWidth + 'px';
-        streamImg.style.height = newHeight + 'px';
-      } else {
-        streamImg.style.width = '100%';
-        streamImg.style.height = 'auto';
-      }
-    } // end if StreamImg
+    monitor.setScale(scale);
   } // end foreach Monitor
 }
 
@@ -258,46 +179,95 @@ function cancel_layout(button) {
   $j('#EditLayout').show();
   for ( var i = 0, length = monitors.length; i < length; i++ ) {
     var monitor = monitors[i];
-    monitor.setup_onclick();
+    monitor.setup_onclick(handleClick);
 
     //monitor_feed = $j('#imageFeed'+monitor.id);
     //monitor_feed.click(monitor.onclick);
   };
-  selectLayout('#zmMontageLayout');
+  selectLayout(freeform_layout_id);
 }
 
 function reloadWebSite(ndx) {
   document.getElementById('imageFeed'+ndx).innerHTML = document.getElementById('imageFeed'+ndx).innerHTML;
 }
 
-var monitors = new Array();
+function takeSnapshot() {
+  monitor_ids = monitorData.map((monitor)=>{
+    return 'monitor_ids[]='+monitor.id;
+  });
+  window.location = '?view=snapshot&action=create&'+monitor_ids.join('&');
+}
+
+const monitors = new Array();
 function initPage() {
   $j("#hdrbutton").click(function() {
     $j("#flipMontageHeader").slideToggle("slow");
     $j("#hdrbutton").toggleClass('glyphicon-menu-down').toggleClass('glyphicon-menu-up');
-    setCookie( 'zmMontageHeaderFlip', $j('#hdrbutton').hasClass('glyphicon-menu-up') ? 'up' : 'down', 3600);
+    setCookie('zmMontageHeaderFlip', $j('#hdrbutton').hasClass('glyphicon-menu-up') ? 'up' : 'down', 3600);
   });
-  if ( getCookie('zmMontageHeaderFlip') == 'down' ) {
+  if (getCookie('zmMontageHeaderFlip') == 'down') {
     // The chosen dropdowns require the selects to be visible, so once chosen has initialized, we can hide the header
     $j("#flipMontageHeader").slideToggle("fast");
     $j("#hdrbutton").toggleClass('glyphicon-menu-down').toggleClass('glyphicon-menu-up');
   }
-
-  for ( var i = 0, length = monitorData.length; i < length; i++ ) {
+  for (let i = 0, length = monitorData.length; i < length; i++) {
     monitors[i] = new MonitorStream(monitorData[i]);
-
+  }
+  selectLayout();
+  for (let i = 0, length = monitorData.length; i < length; i++) {
     // Start the fps and status updates. give a random delay so that we don't assault the server
-    var delay = Math.round( (Math.random()+0.5)*statusRefreshTimeout );
-    console.log("delay: " + delay);
+    const delay = Math.round( (Math.random()+0.5)*statusRefreshTimeout );
     monitors[i].start(delay);
 
-    var interval = monitors[i].refresh;
-    if ( monitors[i].type == 'WebSite' && interval > 0 ) {
-      setInterval(reloadWebSite, interval*1000, i);
+    if ((monitors[i].type == 'WebSite') && (monitors[i].refresh > 0)) {
+      setInterval(reloadWebSite, monitors.refresh*1000, i);
     }
-    monitors[i].setup_onclick();
+    monitors[i].setup_onclick(handleClick);
   }
-  selectLayout('#zmMontageLayout');
+
+  // If you click on the navigation links, shut down streaming so the browser can process it
+  document.querySelectorAll('#main-header-nav a').forEach(function(el) {
+    el.onclick = function() {
+      for (var i = 0, length = monitors.length; i < length; i++) {
+        monitors[i].kill();
+      }
+    };
+  });
 }
+
+function watchFullscreen() {
+  const content = document.getElementById('content');
+  openFullscreen(content);
+}
+
+function handleClick(evt) {
+  console.log("handleClick");
+  var el = evt.currentTarget;
+  console.log(el);
+  var id = el.getAttribute("data-monitor-id");
+  var url = '?view=watch&mid='+id;
+  evt.preventDefault();
+  window.location.assign(url);
+}
+
 // Kick everything off
 $j(document).ready(initPage);
+
+/*
+window.onbeforeunload = function(e) {
+  console.log('unload');
+  //event.preventDefault();
+  for (let i = 0, length = monitorData.length; i < length; i++) {
+    monitors[i].kill();
+  }
+  var e = e || window.event;
+
+  // For IE and Firefox
+  if (e) {
+    e.returnValue = undefined;
+  }
+
+  // For Safari
+  return undefined;
+};
+*/

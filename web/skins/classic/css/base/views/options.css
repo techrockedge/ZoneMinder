@@ -25,11 +25,17 @@ input.large {
   text-align: left;
 }
 
+#options div.col-md {
+  text-align: left;
+}
+
 input[name="newConfig[ZM_OPT_GOOG_RECAPTCHA_SITEKEY]"],
 input[name="newConfig[ZM_OPT_GOOG_RECAPTCHA_SECRETKEY]"],
 input[name="newConfig[ZM_OPT_GEOLOCATION_TILE_PROVIDER]"],
 input[name="newConfig[ZM_OPT_GEOLOCATION_ACCESS_TOKEN]"],
 input[name="newConfig[ZM_AUTH_HASH_SECRET]"],
+input[name="newConfig[ZM_JANUS_SECRET]"],
+input[name="newConfig[ZM_JANUS_PATH]"],
 input[name="newConfig[ZM_UPDATE_CHECK_PROXY]"],
 input[name="newConfig[ZM_WEB_TITLE]"],
 input[name="newConfig[ZM_WEB_TITLE_PREFIX]"],
@@ -52,4 +58,17 @@ input[name="newStorage[Url]"] {
 
 #options label {
   font-weight: bold;
+}
+#options {
+  font-size:90%;
+}
+
+#options .help-block {
+  margin-top: 0;
+}
+
+#options .form-group {
+  margin-bottom: 20px;
+  margin-right: 5px;
+  border-bottom: 1px solid #e7e7e7;
 }

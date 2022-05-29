@@ -35,35 +35,41 @@ var params =
 
 // Called by bootstrap-table to retrieve zm event data
 function ajaxRequest(params) {
-  if ( params.data && params.data.filter ) {
+  if (params.data && params.data.filter) {
     params.data.advsearch = params.data.filter;
     delete params.data.filter;
   }
   $j.getJSON(thisUrl + '?view=request&request=events&task=query'+filterQuery, params.data)
       .done(function(data) {
+        if (data.result == 'Error') {
+          alert(data.message);
+          return;
+        }
         var rows = processRows(data.rows);
         // rearrange the result into what bootstrap-table expects
         params.success({total: data.total, totalNotFiltered: data.totalNotFiltered, rows: rows});
       })
-      .fail(logAjaxFail);
+      .fail(function(jqXHR) {
+        logAjaxFail(jqXHR);
+        $j('#eventTable').bootstrapTable('refresh');
+      });
 }
 
 function processRows(rows) {
   $j.each(rows, function(ndx, row) {
     var eid = row.Id;
-    var mid = row.MonitorId;
     var archived = row.Archived == yesString ? archivedString : '';
     var emailed = row.Emailed == yesString ? emailedString : '';
 
     row.Id = '<a href="?view=event&amp;eid=' + eid + filterQuery + sortQuery + '&amp;page=1">' + eid + '</a>';
-    row.Name = '<a href="?view=event&amp;eid=' + eid + filterQuery + sortQuery + '&amp;page=1">' + row.Name + '</a>'
-               + '<br/><div class="small text-nowrap text-muted">' + archived + emailed + '</div>';
-    if ( canEdit.Monitors ) row.Monitor = '<a href="?view=monitor&amp;mid=' + mid + '">' + row.Monitor + '</a>';
+    row.Name = '<a href="?view=event&amp;eid=' + eid + filterQuery + sortQuery + '&amp;page=1">' + row.Name + '</a>' +
+        '<br/><div class="small text-muted">' + archived + emailed + '</div>';
+    if ( canEdit.Monitors ) row.Monitor = '<a href="?view=event&amp;eid=' + eid + '">' + row.Monitor + '</a>';
     if ( canEdit.Events ) row.Cause = '<a href="#" title="' + row.Notes + '" class="eDetailLink" data-eid="' + eid + '">' + row.Cause + '</a>';
     if ( row.Notes.indexOf('detected:') >= 0 ) {
-      row.Cause = row.Cause + '<a href="#" class="objDetectLink" data-eid=' +eid+ '><div class="small text-nowrap text-muted"><u>' + row.Notes + '</u></div></div></a>';
+      row.Cause = row.Cause + '<a href="#" class="objDetectLink" data-eid=' +eid+ '><div class="small text-muted"><u>' + row.Notes + '</u></div></div></a>';
     } else if ( row.Notes != 'Forced Web: ' ) {
-      row.Cause = row.Cause + '<br/><div class="small text-nowrap text-muted">' + row.Notes + '</div>';
+      row.Cause = row.Cause + '<br/><div class="small text-muted">' + row.Notes + '</div>';
     }
     row.Frames = '<a href="?view=frames&amp;eid=' + eid + '">' + row.Frames + '</a>';
     row.AlarmFrames = '<a href="?view=frames&amp;eid=' + eid + '">' + row.AlarmFrames + '</a>';
@@ -118,7 +124,11 @@ function manageDelConfirmModalBtns() {
           $j('#eventTable').bootstrapTable('refresh');
           $j('#deleteConfirm').modal('hide');
         })
-        .fail(logAjaxFail);
+        .fail( function(jqxhr) {
+          logAjaxFail(jqxhr);
+          $j('#eventTable').bootstrapTable('refresh');
+          $j('#deleteConfirm').modal('hide');
+        });
   });
 
   // Manage the CANCEL modal button

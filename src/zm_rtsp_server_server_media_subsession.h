@@ -11,6 +11,7 @@
 #define ZM_RTSP_SERVER_SERVER_MEDIA_SUBSESSION_H
 
 #include "zm_config.h"
+#include "zm_rtsp_server_fifo_source.h"
 #include <string>
 
 #if HAVE_RTSP_SERVER
@@ -20,7 +21,7 @@ class ZoneMinderDeviceSource;
 
 class BaseServerMediaSubsession {
 	public:
-    BaseServerMediaSubsession(StreamReplicator* replicator):
+    explicit BaseServerMediaSubsession(StreamReplicator* replicator):
       m_replicator(replicator) {};
 
 		FramedSource* createSource(
@@ -36,7 +37,7 @@ class BaseServerMediaSubsession {
         FramedSource *source);
 
 		char const* getAuxLine(
-        ZoneMinderDeviceSource* source,
+        ZoneMinderFifoSource* source,
         unsigned char rtpPayloadType);
 		
 	protected:

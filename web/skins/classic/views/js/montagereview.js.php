@@ -1,6 +1,12 @@
 
 var server_utc_offset = <?php
-$TimeZone = new DateTimeZone( ini_get('date.timezone') );
+$tz = ini_get('date.timezone');
+if (!$tz) {
+  $tz = 'UTC';
+  ZM\Warning('Timezone has not been set. Either select it in Options->System->Timezone or in php.ini');
+}
+
+$TimeZone = new DateTimeZone($tz);
 $now = new DateTime('now', $TimeZone);
 $offset = $TimeZone->getOffset($now);
 echo $offset.'; // '.floor($offset / 3600).' hours ';
@@ -233,6 +239,6 @@ echo "];\n";
 var cWidth;   // save canvas width
 var cHeight;  // save canvas height
 var canvas;   // global canvas definition so we don't have to keep looking it up
-var ctx;
+var ctx = null;
 var underSlider;    // use this to hold what is hidden by the slider
 var underSliderX;   // Where the above was taken from (left side, Y is zero)

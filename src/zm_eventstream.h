@@ -26,15 +26,11 @@
 #include "zm_storage.h"
 #include "zm_stream.h"
 
-#ifdef __cplusplus
 extern "C" {
-#endif
-#include "libavformat/avformat.h"
-#include "libavformat/avio.h"
-#include "libavcodec/avcodec.h"
-#ifdef __cplusplus
+#include <libavformat/avformat.h>
+#include <libavformat/avio.h>
+#include <libavcodec/avcodec.h>
 }
-#endif
 
 class EventStream : public StreamBase {
   public:
@@ -44,69 +40,66 @@ class EventStream : public StreamBase {
   protected:
     struct FrameData {
       //unsigned long   id;
-      double          timestamp;
-      double          offset;
-      double          delta;
-      bool            in_db;
+      SystemTimePoint timestamp;
+      Microseconds offset;
+      Microseconds delta;
+      bool in_db;
     };
 
     struct EventData {
       uint64_t  event_id;
       unsigned int    monitor_id;
-      unsigned long   storage_id;
-      unsigned long   frame_count;    // Value of Frames column in Event
-      unsigned long   last_frame_id;  // Highest frame id known about. Can be < frame_count in incomplete events
-      time_t          start_time;
-      time_t          end_time;
-      double          duration;
-      double          frames_duration;
-      char            path[PATH_MAX];
+      unsigned int    storage_id;
+      int             frame_count;    // Value of Frames column in Event
+      int             last_frame_id;  // Highest frame id known about. Can be < frame_count in incomplete events
+      SystemTimePoint start_time;
+      SystemTimePoint end_time;
+      Microseconds duration;
+      Microseconds frames_duration;
+      std::string path;
       int             n_frames;       // # of frame rows returned from database
       FrameData       *frames;
-      char            video_file[PATH_MAX];
+      std::string video_file;
       Storage::Schemes  scheme;
       int             SaveJPEGs;
       Monitor::Orientation Orientation;
     };
 
   protected:
-    static const int STREAM_PAUSE_WAIT = 250000; // Microseconds
+    static constexpr Milliseconds STREAM_PAUSE_WAIT = Milliseconds(250);
 
     static const StreamMode DEFAULT_MODE = MODE_SINGLE;
 
     StreamMode mode;
     bool forceEventChange;
 
-    long curr_frame_id;
-    double curr_stream_time;
+    int curr_frame_id;
+    SystemTimePoint curr_stream_time;
     bool  send_frame;
-    struct timeval start;     // clock time when started the event
+    TimePoint start;     // clock time when started the event
 
     EventData *event_data;
 
   protected:
     bool loadEventData(uint64_t event_id);
-    bool loadInitialEventData(uint64_t init_event_id, unsigned int init_frame_id);
-    bool loadInitialEventData(int monitor_id, time_t event_time);
+    bool loadInitialEventData(uint64_t init_event_id, int init_frame_id);
+    bool loadInitialEventData(int monitor_id, SystemTimePoint event_time);
 
     bool checkEventLoaded();
-    void processCommand(const CmdMsg *msg);
-    bool sendFrame(int delta_us);
+    void processCommand(const CmdMsg *msg) override;
+    bool sendFrame(Microseconds delta);
 
   public:
     EventStream() :
       mode(DEFAULT_MODE),
       forceEventChange(false),
       curr_frame_id(0),
-      curr_stream_time(0.0),
       send_frame(false),
       event_data(nullptr),
       storage(nullptr),
-      ffmpeg_input(nullptr),
-      // Used when loading frames from an mp4
-      input_codec_context(nullptr),
-      input_codec(nullptr)
+      ffmpeg_input(nullptr)
     {}
+
     ~EventStream() {
         if ( event_data ) {
           if ( event_data->frames ) {
@@ -125,18 +118,16 @@ class EventStream : public StreamBase {
           ffmpeg_input = nullptr;
         }
     }
-    void setStreamStart(uint64_t init_event_id, unsigned int init_frame_id);
+    void setStreamStart(uint64_t init_event_id, int init_frame_id);
     void setStreamStart(int monitor_id, time_t event_time);
     void setStreamMode(StreamMode p_mode) { mode = p_mode; }
     void runStream() override;
     Image *getImage();
   private:
-    bool send_file(const char *filepath);
+    bool send_file(const std::string &filepath);
     bool send_buffer(uint8_t * buffer, int size);
     Storage *storage;
     FFmpeg_Input  *ffmpeg_input;
-    AVCodecContext *input_codec_context;
-    AVCodec *input_codec;
 };
 
 #endif // ZM_EVENTSTREAM_H

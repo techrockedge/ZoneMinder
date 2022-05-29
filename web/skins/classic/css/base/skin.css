@@ -142,6 +142,10 @@ label {
     margin: 0 4px;
 }
 
+button.btn {
+  line-height: 1;
+  font-size: 18px;
+}
 input,textarea,select,button,.btn-primary {
     border: 1px #ccc solid;
     padding: 5px;
@@ -339,6 +343,14 @@ ul.tabList li.active a {
 
 .alarm, .errorText, .error {
     color: #ff3f34;
+}
+/* Refers to the error box at the top of the web UI */
+#error {
+  width: 100%;
+  padding: 5px;
+  font-weight: bold;
+  background-color: white;
+  color: #ff3f34;
 }
 
 .timedErrorBox {
@@ -598,18 +610,6 @@ input[type=submit]:disabled,
 
 }
 
-#options {
-  font-size:90%;
-}
-
-#options .help-block {
-  margin-top: 0;
-}
-
-#options .form-group {
-  margin-bottom: 20px;
-  border-bottom: 1px solid #e7e7e7;
-}
 
 .navbar{
 	margin-bottom: 0 !important;
@@ -747,4 +747,39 @@ a.flip {
 
 #objdetectModal .modal-content {
     width: fit-content;
+}
+
+#modalLogout .modal-dialog {
+  height: 100%;
+}
+#modalLogout .modal-content {
+  height: 90%;
+}
+#modalLogout .modal-body {
+  overflow:auto;
+}
+#getAccountCircleHTML {
+  padding: 4px 0 0 0;
+}
+#logoutButton {
+  padding: 4px 10px 7px 10px;
+}
+#stateModalBtn {
+  padding: 4px 10px 7px 10px;
+}
+#shutdownButton {
+  padding: 3px 10px 5px 10px;
+  color: white;
+}
+#shutdownButton i {
+}
+.imageFeed {
+  margin: 0 auto;
+  text-align: center;
+  vertical-align: middle;
+  position: relative;
+}
+.imageFeed img {
+  width: 100%;
+  height: 100%;
 }

@@ -9,6 +9,8 @@ class Filter extends ZM_Object {
   protected $defaults = array(
     'Id'              =>  null,
     'Name'            =>  '',
+    'UserId'          =>  0,
+    'ExecuteInterval' =>  60,
     'AutoExecute'     =>  0,
     'AutoExecuteCmd'  =>  '',
     'AutoEmail'       =>  0,
@@ -26,7 +28,6 @@ class Filter extends ZM_Object {
     'AutoCopy'        =>  0,
     'AutoCopyTo'      =>  0,
     'UpdateDiskSpace' =>  0,
-    'UserId'          =>  0,
     'Background'      =>  0,
     'Concurrent'      =>  0,
     'Query_json'      =>  '',
@@ -60,6 +61,10 @@ class Filter extends ZM_Object {
       foreach ( $this->FilterTerms() as $term ) {
         $this->_querystring .= $term->querystring($objectname, $separator);
       } # end foreach term
+      $this->_querystring .= $separator.urlencode($objectname.'[Query][sort_asc]').'='.$this->sort_asc();
+      $this->_querystring .= $separator.urlencode($objectname.'[Query][sort_field]').'='.$this->sort_field();
+      $this->_querystring .= $separator.urlencode($objectname.'[Query][skip_locked]').'='.$this->skip_locked();
+      $this->_querystring .= $separator.urlencode($objectname.'[Query][limit]').'='.$this->limit();
       if ( $this->Id() ) {
         $this->_querystring .= $separator.$objectname.urlencode('[Id]').'='.$this->Id();
       }
@@ -124,7 +129,7 @@ class Filter extends ZM_Object {
     foreach ( $this->Terms as $term ) {
       if ( $term->attr == 'StorageId' ) {
         # TODO handle other operators like !=
-        $storage_ids[] = $term->value;
+        $storage_ids[] = $term->val;
       }
     }
     if ( count($storage_ids) ) {
@@ -204,16 +209,27 @@ class Filter extends ZM_Object {
   }
 
   public function sort_asc( ) {
-    if ( func_num_args( ) ) {
+    if (func_num_args()) {
       $Query = $this->Query();
       $Query['sort_asc'] = func_get_arg(0);
       $this->Query($Query);
     }
-    if ( isset( $this->Query()['sort_asc'] ) ) {
+    if (isset($this->Query()['sort_asc'])) {
       return $this->{'Query'}['sort_asc'];
     }
     return ZM_WEB_EVENT_SORT_ORDER == 'asc' ? 1 : 0;
     #return $this->defaults{'sort_asc'};
+  }
+
+  public function skip_locked() {
+    if (func_num_args()) {
+      $Query = $this->Query();
+      $Query['skip_locked'] = func_get_arg(0);
+      $this->Query($Query);
+    }
+    if (isset($this->Query()['skip_locked']))
+      return $this->{'Query'}['skip_locked'];
+    return false;
   }
 
   public function limit( ) {
@@ -224,7 +240,7 @@ class Filter extends ZM_Object {
     }
     if ( isset( $this->Query()['limit'] ) )
       return $this->{'Query'}['limit'];
-    return 100;
+    return 0;
     #return $this->defaults{'limit'};
   }
 
@@ -349,6 +365,8 @@ class Filter extends ZM_Object {
       '![]' => 2,
       'and' => 3,
       'or' => 4,
+      'IS' => 2,
+      'IS NOT' => 2,
     );
 
     for ( $i = 0; $i < count($terms); $i++ ) {
@@ -476,6 +494,7 @@ class Filter extends ZM_Object {
         }
       } # end if attr
 
+      $sqlValue = '';
       if ( isset($term['op']) ) {
         if ( empty($term['op']) ) {
           $term['op'] = '=';
@@ -507,11 +526,11 @@ class Filter extends ZM_Object {
         case 'IS' :
         case 'IS NOT' :
           if ( $term['val'] == 'Odd' )  {
-            $sqlValue .= ' % 2 = 1';
+            $sqlValue = ' % 2 = 1';
           } else if ( $term['val'] == 'Even' )  {
-            $sqlValue .= ' % 2 = 0';
+            $sqlValue = ' % 2 = 0';
           } else {
-            $sqlValue .= ' '.$term['op'];
+            $sqlValue = ' '.$term['op'];
           }
           break;
         default :
@@ -522,10 +541,10 @@ class Filter extends ZM_Object {
           if ( !count($postfixStack) ) {
             $postfixStack[] = array('type'=>'op', 'value'=>$term['op'], 'sqlValue'=>$sqlValue);
             break;
-          } elseif ( $postfixStack[count($postfixStack)-1]['type'] == 'obr' ) {
+          } else if ( $postfixStack[count($postfixStack)-1]['type'] == 'obr' ) {
             $postfixStack[] = array('type'=>'op', 'value'=>$term['op'], 'sqlValue'=>$sqlValue);
             break;
-          } elseif ( $priorities[$term['op']] < $priorities[$postfixStack[count($postfixStack)-1]['value']] ) {
+          } else if ( $priorities[$term['op']] < $priorities[$postfixStack[count($postfixStack)-1]['value']] ) {
             $postfixStack[] = array('type'=>'op', 'value'=>$term['op'], 'sqlValue'=>$sqlValue );
             break;
           } else {
@@ -537,6 +556,7 @@ class Filter extends ZM_Object {
       if ( isset($term['val']) ) {
         $valueList = array();
         foreach ( preg_split('/["\'\s]*?,["\'\s]*?/', preg_replace('/^["\']+?(.+)["\']+?$/', '$1', $term['val'])) as $value ) {
+          $value_upper = strtoupper($value);
           switch ( $term['attr'] ) {
           case 'MonitorName':
           case 'Name':
@@ -551,9 +571,9 @@ class Filter extends ZM_Object {
           case 'FilterServerId':
           case 'StorageServerId':
           case 'ServerId':
-            if ( $value == 'ZM_SERVER_ID' ) {
+            if ( $value_upper == 'ZM_SERVER_ID' ) {
               $value = ZM_SERVER_ID;
-            } else if ( $value == 'NULL' ) {
+            } else if ( $value_upper == 'NULL' ) {
 
             } else {
               $value = dbEscape($value);
@@ -567,7 +587,8 @@ class Filter extends ZM_Object {
           case 'DateTime':
           case 'EndDateTime':
           case 'StartDateTime':
-            $value = "'".strftime(STRF_FMT_DATETIME_DB, strtotime($value))."'";
+            if ( $value_upper != 'NULL' )
+              $value = "'".strftime(STRF_FMT_DATETIME_DB, strtotime($value))."'";
             break;
           case 'Date':
           case 'EndDate':
@@ -580,7 +601,7 @@ class Filter extends ZM_Object {
             $value = 'extract(hour_second from \''.strftime(STRF_FMT_DATETIME_DB, strtotime($value)).'\')';
             break;
           default :
-            if ( $value != 'NULL' )
+            if ( $value_upper != 'NULL' )
               $value = dbEscape($value);
           } // end switch attribute
           $valueList[] = $value;
@@ -630,7 +651,7 @@ class Filter extends ZM_Object {
 
     if ( !FilterTerm::is_valid_attr($term['attr']) ) {
       Error('Unsupported filter attribute ' . $term['attr']);
-      return $this;
+      //return $this;
     }
 
     $terms = $this->terms();

@@ -152,7 +152,7 @@ $booleanValues = array(
 
 $focusWindow = true;
 
-$storageareas = array('' => 'All') + ZM\ZM_Object::Objects_Indexed_By_Id('ZM\Storage');
+$storageareas = array('' => array('Name'=>'NULL Unspecified'), '0' => array('Name'=>'Zero')) + ZM\ZM_Object::Objects_Indexed_By_Id('ZM\Storage');
 
 $weekdays = array();
 for ( $i = 0; $i < 7; $i++ ) {
@@ -187,15 +187,15 @@ foreach ( dbFetchAll('SELECT Id, Name, MonitorId FROM Zones ORDER BY lower(`Name
 }
 
 xhtmlHeaders(__FILE__, translate('EventFilter'));
+echo getBodyTopHTML();
+echo $navbar = getNavBarHTML();
 ?>
-<body>
   <div id="page">
-<?php echo $navbar = getNavBarHTML(); ?>
     <div id="content">
       <form name="selectForm" id="selectForm" method="get" action="?">
         <input type="hidden" name="view" value="filter"/>
         <hr/>
-        <div id="filterSelector"><label for="<?php echo 'Id' ?>"><?php echo translate('UseFilter') ?></label>
+        <div id="filterSelector"><label for="Id"><?php echo translate('UseFilter') ?></label>
           <?php
 if ( count($filterNames) > 1 ) {
    echo htmlSelect('Id', $filterNames, $filter->Id(), array('data-on-change-this'=>'selectFilter'));
@@ -210,8 +210,7 @@ if ( (null !== $filter->Concurrent()) and $filter->Concurrent() )
 ?>
         </div>
       </form>
-      <form name="contentForm" id="contentForm" method="post" class="validateFormOnSubmit" action="?view=filter">
-        <input type="hidden" name="Id" value="<?php echo $filter->Id() ?>"/>
+      <form name="contentForm" id="contentForm" method="post" class="validateFormOnSubmit" action="?view=filter&Id=<?php echo $filter->Id() ?>">
         <input type="hidden" name="action"/>
         <input type="hidden" name="object" value="filter"/>
 
@@ -368,13 +367,14 @@ for ( $i=0; $i < count($terms); $i++ ) {
                 <?php
 # Note: The keys need to be actual column names
 $sort_fields = array(
+    ''              => translate('None'),
     'Id'            => translate('AttrId'),
     'Name'          => translate('AttrName'),
     'Cause'         => translate('AttrCause'),
     'DiskSpace'     => translate('AttrDiskSpace'),
     'Notes'         => translate('AttrNotes'),
     'MonitorName'   => translate('AttrMonitorName'),
-    'StartTime'     => translate('AttrStartDateTime'),
+    'StartDateTime' => translate('AttrStartDateTime'),
     'Length'        => translate('AttrDuration'),
     'Frames'        => translate('AttrFrames'),
     'AlarmFrames'   => translate('AttrAlarmFrames'),
@@ -384,10 +384,18 @@ $sort_fields = array(
     );
 echo htmlSelect('filter[Query][sort_field]', $sort_fields, $filter->sort_field());
 $sort_dirns = array(
-    '1' => translate('SortAsc'),
-    '0'  => translate('SortDesc')
-    );
-echo htmlSelect( 'filter[Query][sort_asc]', $sort_dirns, $filter->sort_asc() );
+  '1' => translate('SortAsc'),
+  '0'  => translate('SortDesc')
+);
+echo htmlSelect('filter[Query][sort_asc]', $sort_dirns, $filter->sort_asc());
+?>
+              </td>
+              <td>
+                <label for="filter[Query][skip_locked]"><?php echo translate('Skip Locked') ?></label>
+<?php
+echo htmlSelect('filter[Query][skip_locked]',
+  array('0'=>translate('No'), '1'=>translate('Yes')),
+  $filter->skip_locked());
 ?>
               </td>
               <td>  
@@ -397,7 +405,7 @@ echo htmlSelect( 'filter[Query][sort_asc]', $sort_dirns, $filter->sort_asc() );
             </tr>
           </tbody>
         </table>
-        <hr/>
+<div id="ActionsAndOptions">
         <div id="actionsTable" class="filterTable">
           <fieldset><legend><?php echo translate('Actions') ?></legend>
             <p>
@@ -469,8 +477,12 @@ if ( ZM_OPT_MESSAGE ) {
         <div id="optionsTable" class="filterTable">
           <fieldset><legend><?php echo translate('Options') ?></legend>
             <p>
-              <label for="background"><?php echo translate('BackgroundFilter') ?></label>
+              <label for="filter[Background]"><?php echo translate('BackgroundFilter') ?></label>
               <input type="checkbox" id="filter[Background]" name="filter[Background]" value="1"<?php if ( $filter->Background() ) { ?> checked="checked"<?php } ?> data-on-click-this="updateButtons"/>
+            </p>
+            <p>
+              <label for="ExecuteInterval"><?php echo translate('Execute Interval') ?></label>
+              <input type="number" id="filter[ExecuteInterval]" name="filter[ExecuteInterval]" min="0" step="1" value="<?php echo $filter->ExecuteInterval() ?>" /><?php echo translate('seconds'); ?>
             </p>
             <p>
               <label for="Concurrent"><?php echo translate('ConcurrentFilter') ?></label>
@@ -494,7 +506,7 @@ if ( ZM_OPT_EMAIL ) {
               </p>
               <p>
                 <label><?php echo translate('FilterEmailBody') ?></label>
-                <textarea name="filter[EmailBody]"><?php echo validHtmlStr($filter->EmailBody()) ?></textarea>
+                <textarea name="filter[EmailBody]" rows="<?php echo count(explode("\n", $filter->EmailBody())) ?>"><?php echo validHtmlStr($filter->EmailBody()) ?></textarea>
               </p>
             </div>
 <?php
@@ -502,21 +514,21 @@ if ( ZM_OPT_EMAIL ) {
 ?>
           </fieldset>
         </div>
-        <hr/>
+</div><!--ActionsAndOptions-->
         <div id="contentButtons">
           <button type="button" data-on-click-this="submitToEvents"><?php echo translate('ListMatches') ?></button>
           <button type="button" data-on-click-this="submitToMontageReview"><?php echo translate('ViewMatches') ?></button>
           <button type="button" data-on-click-this="submitToExport"><?php echo translate('ExportMatches') ?></button>
-          <button type="button" name="executeButton" id="executeButton" data-on-click-this="executeFilter"><?php echo translate('Execute') ?></button>
+          <button type="button" data-on-click-this="submitAction" value="execute" id="executeButton"><?php echo translate('Execute') ?></button>
 <?php 
 if ( canEdit('Events') ) {
 ?>
-          <button type="submit" name="Save" value="Save" data-on-click-this="saveFilter"><?php echo translate('Save') ?></button>
-          <button type="submit" name="SaveAs" value="SaveAs" data-on-click-this="saveFilter"><?php echo translate('SaveAs') ?></button>
+          <button type="button" data-on-click-this="submitAction" value="Save" id="Save"><?php echo translate('Save') ?></button>
+          <button type="button" data-on-click-this="submitAction" value="SaveAs" id="SaveAs"><?php echo translate('SaveAs') ?></button>
 <?php 
   if ( $filter->Id() ) {
  ?>
-          <button type="button" value="Delete" data-on-click-this="deleteFilter"><?php echo translate('Delete') ?></button>
+          <button type="button" value="delete" data-on-click-this="deleteFilter"><?php echo translate('Delete') ?></button>
 <?php 
   }
 }

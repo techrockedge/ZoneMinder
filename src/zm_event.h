@@ -20,11 +20,23 @@
 #ifndef ZM_EVENT_H
 #define ZM_EVENT_H
 
+#include "zm_config.h"
 #include "zm_define.h"
+#include "zm_packet.h"
 #include "zm_storage.h"
+#include "zm_time.h"
+#include "zm_utils.h"
+#include "zm_zone.h"
+
+#include <atomic>
+#include <condition_variable>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <queue>
 #include <set>
+#include <thread>
+
 
 class EventStream;
 class Frame;
@@ -65,22 +77,27 @@ class Event {
 
     uint64_t  id;
     Monitor      *monitor;
-    struct timeval  start_time;
-    struct timeval  end_time;
+    SystemTimePoint start_time;
+    SystemTimePoint end_time;
     std::string     cause;
     StringSetMap    noteSetMap;
     int        frames;
     int        alarm_frames;
     bool alarm_frame_written;
-    unsigned int  tot_score;
-    unsigned int  max_score;
+    int  tot_score;
+    int  max_score;
     std::string path;
     std::string snapshot_file;
     std::string alarm_file;
     VideoStore *videoStore;
 
-    std::string video_name;
+    std::string container;
+    std::string codec;
     std::string video_file;
+    std::string video_path;
+    std::string video_incomplete_file;
+    std::string video_incomplete_path;
+
     int        last_db_frame;
     bool have_video_keyframe; // a flag to tell us if we have had a video keyframe when writing an mp4.  The first frame SHOULD be a video keyframe.
     Storage::Schemes  scheme;
@@ -88,68 +105,72 @@ class Event {
 
     void createNotes(std::string &notes);
 
+    std::queue<ZMLockedPacket *> packet_queue;
+    std::mutex packet_queue_mutex;
+    std::condition_variable packet_queue_condition;
+
+    void Run();
+
+    std::atomic<bool> terminate_;
+    std::thread thread_;
+
  public:
     static bool OpenFrameSocket(int);
     static bool ValidateFrameSocket(int);
 
-    Event(
-        Monitor *p_monitor,
-        struct timeval p_start_time,
-        const std::string &p_cause,
-        const StringSetMap &p_noteSetMap
-        );
+    Event(Monitor *p_monitor,
+          SystemTimePoint p_start_time,
+          const std::string &p_cause,
+          const StringSetMap &p_noteSetMap);
     ~Event();
 
     uint64_t Id() const { return id; }
     const std::string &Cause() const { return cause; }
+    void addNote(const char *cause, const std::string &note);
     int Frames() const { return frames; }
     int AlarmFrames() const { return alarm_frames; }
 
-    const struct timeval &StartTime() const { return start_time; }
-    const struct timeval &EndTime() const { return end_time; }
+    SystemTimePoint StartTime() const { return start_time; }
+    SystemTimePoint EndTime() const { return end_time; }
+    TimePoint::duration Duration() const { return end_time - start_time; };
 
-    void AddPacket(ZMPacket *p);
-    bool WritePacket(ZMPacket &p);
+    void AddPacket(ZMLockedPacket *);
+    void AddPacket_(const std::shared_ptr<ZMPacket> &p);
+    bool WritePacket(const std::shared_ptr<ZMPacket> &p);
     bool SendFrameImage(const Image *image, bool alarm_frame=false);
-    bool WriteFrameImage(
-        Image *image,
-        struct timeval timestamp,
-        const char *event_file,
-        bool alarm_frame=false
-       ) const;
+    bool WriteFrameImage(Image *image, SystemTimePoint timestamp, const char *event_file, bool alarm_frame = false) const;
 
     void updateNotes(const StringSetMap &stringSetMap);
 
-    void AddFrames(int n_frames, Image **images, struct timeval **timestamps);
-    void AddFrame(
-        Image *image,
-        struct timeval timestamp,
-        int score=0,
-        Image *alarm_image=nullptr);
+    void AddFrame(const std::shared_ptr<ZMPacket>&packet);
+
+    void Stop() {
+      {
+        std::unique_lock<std::mutex> lck(packet_queue_mutex);
+        terminate_ = true;
+      }
+      packet_queue_condition.notify_all();
+    }
+    bool Stopped() const { return terminate_; }
 
  private:
-    void AddFramesInternal(
-        int n_frames,
-        int start_frame,
-        Image **images,
-        struct timeval **timestamps);
     void WriteDbFrames();
-    void UpdateFramesDelta(double offset);
     bool SetPath(Storage *storage);
 
  public:
-    static const char *getSubPath(struct tm *time) {
-      static char subpath[PATH_MAX] = "";
-      snprintf(subpath, sizeof(subpath), "%02d/%02d/%02d/%02d/%02d/%02d",
-          time->tm_year-100, time->tm_mon+1, time->tm_mday,
-          time->tm_hour, time->tm_min, time->tm_sec);
+    static std::string getSubPath(tm time) {
+      std::string subpath = stringtf("%02d/%02d/%02d/%02d/%02d/%02d",
+          time.tm_year - 100, time.tm_mon + 1, time.tm_mday,
+          time.tm_hour, time.tm_min, time.tm_sec);
       return subpath;
     }
-    static const char *getSubPath(time_t *time) {
-      return Event::getSubPath(localtime(time));
+    static std::string getSubPath(time_t *time) {
+      tm time_tm = {};
+      localtime_r(time, &time_tm);
+      return Event::getSubPath(time_tm);
     }
 
-    const char* getEventFile(void) const {
+    const char* getEventFile() const {
       return video_file.c_str();
     }
 
@@ -157,48 +178,19 @@ class Event {
       return pre_alarm_count;
     }
     static void EmptyPreAlarmFrames() {
-#if 0
-      while ( pre_alarm_count > 0 ) {
-				int i = pre_alarm_count - 1;
-				delete pre_alarm_data[i].image;
-				pre_alarm_data[i].image = nullptr;
-				if ( pre_alarm_data[i].alarm_frame ) {
-					delete pre_alarm_data[i].alarm_frame;
-					pre_alarm_data[i].alarm_frame = nullptr;
-				}
-				pre_alarm_count--;
-			}
-#endif
       pre_alarm_count = 0;
     }
     static void AddPreAlarmFrame(
         Image *image,
-        struct timeval timestamp,
+        SystemTimePoint timestamp,
         int score=0,
         Image *alarm_frame=nullptr
         ) {
-#if 0
-      pre_alarm_data[pre_alarm_count].image = new Image(*image);
-      pre_alarm_data[pre_alarm_count].timestamp = timestamp;
-      pre_alarm_data[pre_alarm_count].score = score;
-      if ( alarm_frame ) {
-        pre_alarm_data[pre_alarm_count].alarm_frame = new Image(*alarm_frame);
-      }
-#endif
       pre_alarm_count++;
     }
     void SavePreAlarmFrames() {
-#if 0
-      for ( int i = 0; i < pre_alarm_count; i++ ) {
-        AddFrame(
-						pre_alarm_data[i].image,
-						pre_alarm_data[i].timestamp,
-						pre_alarm_data[i].score,
-						pre_alarm_data[i].alarm_frame);
-			}
-#endif
       EmptyPreAlarmFrames();
     }
+    int MonitorId();
 };
-
 #endif // ZM_EVENT_H

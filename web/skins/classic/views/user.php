@@ -20,12 +20,12 @@
 
 $selfEdit = ZM_USER_SELF_EDIT && ($_REQUEST['uid'] == $user['Id']);
 
-if ( !canEdit('System') && !$selfEdit ) {
+if (!canEdit('System') && !$selfEdit) {
   $view = 'error';
   return;
 }
 
-require('includes/User.php');
+require_once('includes/User.php');
 
 if ( $_REQUEST['uid'] ) {
 	if ( !($newUser = new ZM\User($_REQUEST['uid'])) ) {
@@ -54,9 +54,9 @@ foreach ( dbFetchAll($sql) as $monitor ) {
 $focusWindow = true;
 
 xhtmlHeaders(__FILE__, translate('User').' - '.$newUser->Username());
+echo getBodyTopHTML();
+echo getNavBarHTML();
 ?>
-<body>
-<?php echo getNavBarHTML() ?>
   <div id="page">
     <div class="w-100">
       <div class="float-left pl-3 pt-1">
@@ -71,14 +71,16 @@ xhtmlHeaders(__FILE__, translate('User').' - '.$newUser->Username());
       <form id="contentForm" name="contentForm" method="post" action="?view=user">
         <input type="hidden" name="redirect" value="<?php echo isset($_REQUEST['prev']) ? $_REQUEST['prev'] : 'options&tab=users' ?>"/>
         <input type="hidden" name="uid" value="<?php echo validHtmlStr($_REQUEST['uid']) ?>"/>
+        <div class="BasicInformation">
+
         <table id="contentTable" class="table">
           <tbody>
 <?php
-if ( canEdit('System') ) {
+if (canEdit('System')) {
 ?>
             <tr>
               <th class="text-right" scope="row"><?php echo translate('Username') ?></th>
-              <td><input type="text" name="newUser[Username]" value="<?php echo validHtmlStr($newUser->Username()); ?>"<?php echo $newUser->Username() == 'admin' ? ' readonly="readonly"':''?>/></td>
+              <td><input type="text" name="newUser[Username]" pattern="[A-Za-z0-9 .@]+" value="<?php echo validHtmlStr($newUser->Username()); ?>"<?php echo $newUser->Username() == 'admin' ? ' readonly="readonly"':''?>/></td>
             </tr>
 <?php
 }
@@ -95,13 +97,33 @@ if ( canEdit('System') ) {
               <th class="text-right" scope="row"><?php echo translate('Language') ?></th>
               <td><?php echo htmlSelect('newUser[Language]', $langs, $newUser->Language()) ?></td>
             </tr>
+            <tr>
+              <th class="text-right" scope="row"><?php echo translate('Home View') ?></th>
+              <td><input type="text" name="newUser[HomeView]" value="<?php echo validHtmlStr($newUser->HomeView()); ?>"/></td>
+            </tr>
 <?php
-if ( canEdit('System') and ( $newUser->Username() != 'admin' ) ) {
+if (canEdit('System')) {
 ?>
             <tr>
               <th class="text-right" scope="row"><?php echo translate('Enabled') ?></th>
               <td><?php echo htmlSelect('newUser[Enabled]', $yesno, $newUser->Enabled()) ?></td>
             </tr>
+            <tr>
+              <th class="text-right" scope="row"><?php echo translate('MaxBandwidth') ?></th>
+              <td><?php echo htmlSelect('newUser[MaxBandwidth]', $bandwidths, $newUser->MaxBandwidth()) ?></td>
+            </tr>
+<?php
+}
+?>
+          </tbody>
+        </table>
+      </div><!--end basic information-->
+<?php
+if (canEdit('System')) {
+?>
+      <div class="Permissions">
+        <table id="contentTable" class="table">
+          <tbody>
             <tr>
               <th class="text-right" scope="row"><?php echo translate('Stream') ?></th>
               <td><?php echo htmlSelect('newUser[Stream]', $nv, $newUser->Stream()) ?></td>
@@ -110,6 +132,12 @@ if ( canEdit('System') and ( $newUser->Username() != 'admin' ) ) {
               <th class="text-right" scope="row"><?php echo translate('Events') ?></th>
               <td><?php echo htmlSelect('newUser[Events]', $nve, $newUser->Events()) ?></td>
             </tr>
+<?php if (defined('ZM_FEATURES_SNAPSHOTS') and ZM_FEATURES_SNAPSHOTS) { ?>
+            <tr>
+              <th class="text-right" scope="row"><?php echo translate('Snapshots') ?></th>
+              <td><?php echo htmlSelect('newUser[Snapshots]', $nve, $newUser->Snapshots()) ?></td>
+            </tr>
+<?php } ?>
             <tr>
               <th class="text-right" scope="row"><?php echo translate('Control') ?></th>
               <td><?php echo htmlSelect('newUser[Control]', $nve, $newUser->Control()) ?></td>
@@ -131,10 +159,6 @@ if ( canEdit('System') and ( $newUser->Username() != 'admin' ) ) {
               <td><?php echo htmlSelect('newUser[Devices]', $nve, $newUser->Devices()) ?></td>
             </tr>
             <tr>
-              <th class="text-right" scope="row"><?php echo translate('MaxBandwidth') ?></th>
-              <td><?php echo htmlSelect('newUser[MaxBandwidth]', $bandwidths, $newUser->MaxBandwidth()) ?></td>
-            </tr>
-            <tr>
               <th class="text-right" scope="row"><?php echo translate('RestrictedMonitors') ?></th>
               <td>
 <?php
@@ -145,7 +169,7 @@ if ( canEdit('System') and ( $newUser->Username() != 'admin' ) ) {
 ?>
               </td>
             </tr>
-<?php if ( ZM_OPT_USE_API ) { ?>
+<?php if (ZM_OPT_USE_API) { ?>
             <tr>
               <th class="text-right" scope="row"><?php echo translate('APIEnabled')?></th>
               <td><?php echo htmlSelect('newUser[APIEnabled]', $yesno, $newUser->APIEnabled()) ?></td>
@@ -153,15 +177,18 @@ if ( canEdit('System') and ( $newUser->Username() != 'admin' ) ) {
 
 <?php
       } // end if ZM_OPT_USE_API
-} // end if canEdit(System)
 ?>
           </tbody>
         </table>
-        <div id="contentButtons">
-          <button type="submit" name="action" value="Save"><?php echo translate('Save') ?></button>
-          <button type="button" data-on-click="backWindow"><?php echo translate('Cancel') ?></button>
-        </div>
-      </form>
-    </div>
+      </div><!--Permissions-->
+<?php
+} // end if canEdit(System)
+?>
+      <div id="contentButtons">
+        <button type="submit" name="action" value="Save"><?php echo translate('Save') ?></button>
+        <button type="button" data-on-click="backWindow"><?php echo translate('Cancel') ?></button>
+      </div>
+    </form>
   </div>
+</div>
 <?php xhtmlFooter() ?>

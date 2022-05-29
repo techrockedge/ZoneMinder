@@ -23,6 +23,7 @@
 // Static JavaScript should go in skin.js
 //
 
+global $user;
 ?>
 var AJAX_TIMEOUT = <?php echo ZM_WEB_AJAX_TIMEOUT ?>;
 var navBarRefresh = <?php echo 1000*ZM_WEB_REFRESH_NAVBAR ?>;
@@ -43,7 +44,7 @@ var serverId = '<?php echo defined('ZM_SERVER_ID') ? ZM_SERVER_ID : '' ?>';
 var canView = {};
 var canEdit = {};
 <?php
-$perms = array('Stream', 'Events', 'Control', 'Monitors', 'Groups', 'System', 'Devices');
+$perms = array('Stream', 'Events', 'Control', 'Monitors', 'Groups', 'Snapshots', 'System', 'Devices');
 foreach ( $perms as $perm ) {
 ?>
   canView["<?php echo $perm ?>"] = <?php echo canView($perm)?'true':'false' ?>;
@@ -53,6 +54,7 @@ foreach ( $perms as $perm ) {
 ?>
 
 var ANIMATE_THUMBS = <?php echo ZM_WEB_ANIMATE_THUMBS?'true':'false' ?>;
+var SCALE_BASE = <?php echo SCALE_BASE ?>;
 
 var refreshParent = <?php
 if ( ! empty($refreshParent) ) {
@@ -82,4 +84,55 @@ var imagePrefix = "<?php echo '?view=image&eid=' ?>";
 
 var auth_hash = '<?php echo generateAuthHash(ZM_AUTH_HASH_IPS) ?>';
 var auth_relay = '<?php echo get_auth_relay() ?>';
+var user = <?php
+$user_without_password = $user;
+unset($user_without_password['Password']);
+echo json_encode($user_without_password);
+?>;
 var running = <?php echo daemonCheck()?'true':'false' ?>;
+
+const STATE_UNKNOWN = <?php echo STATE_UNKNOWN ?>;
+const STATE_IDLE = <?php echo STATE_IDLE ?>;
+const STATE_PREALARM = <?php echo STATE_PREALARM ?>;
+const STATE_ALARM = <?php echo STATE_ALARM ?>;
+const STATE_ALERT = <?php echo STATE_ALERT ?>;
+const STATE_TAPE = <?php echo STATE_TAPE ?>;
+
+const CMD_ANALYZE_ON = <?php echo CMD_ANALYZE_ON ?>;
+const CMD_ANALYZE_OFF = <?php echo CMD_ANALYZE_OFF ?>;
+const CMD_NONE = <?php echo CMD_NONE ?>;
+const CMD_PAUSE = <?php echo CMD_PAUSE ?>;
+const CMD_PLAY = <?php echo CMD_PLAY ?>;
+const CMD_VARPLAY = <?php echo CMD_VARPLAY ?>;
+const CMD_STOP = <?php echo CMD_STOP ?>;
+const CMD_FASTFWD = <?php echo CMD_FASTFWD ?>;
+const CMD_SLOWFWD = <?php echo CMD_SLOWFWD ?>;
+const CMD_SLOWREV = <?php echo CMD_SLOWREV ?>;
+const CMD_FASTREV = <?php echo CMD_FASTREV ?>;
+const CMD_ZOOMIN = <?php echo CMD_ZOOMIN ?>;
+const CMD_ZOOMOUT = <?php echo CMD_ZOOMOUT ?>;
+const CMD_PAN = <?php echo CMD_PAN ?>;
+const CMD_SCALE = <?php echo CMD_SCALE ?>;
+const CMD_PREV = <?php echo CMD_PREV ?>;
+const CMD_NEXT = <?php echo CMD_NEXT ?>;
+const CMD_SEEK = <?php echo CMD_SEEK ?>;
+const CMD_QUERY = <?php echo CMD_QUERY ?>;
+const CMD_QUIT = <?php echo CMD_QUIT ?>;
+const CMD_MAXFPS = <?php echo CMD_MAXFPS ?>;
+
+var stateStrings = new Array();
+stateStrings[STATE_UNKNOWN] = "<?php echo translate('Unknown') ?>";
+stateStrings[STATE_IDLE] = "<?php echo translate('Idle') ?>";
+stateStrings[STATE_PREALARM] = "<?php echo translate('Prealarm') ?>";
+stateStrings[STATE_ALARM] = "<?php echo translate('Alarm') ?>";
+stateStrings[STATE_ALERT] = "<?php echo translate('Alert') ?>";
+stateStrings[STATE_TAPE] = "<?php echo translate('Record') ?>";
+
+<?php
+global $config;
+foreach ($config as $name=>$c) {
+  if (!$c['Private']) {
+    echo 'const '. $name . ' = \''.preg_replace('/(\n\r?)/', '\\\\$1', $c['Value']).'\';'.PHP_EOL;
+  }
+}
+?>
