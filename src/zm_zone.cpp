@@ -788,7 +788,7 @@ bool Zone::ParsePolygonString(const char *poly_string, Polygon &polygon) {
   return !vertices.empty();
 }  // end bool Zone::ParsePolygonString(const char *poly_string, Polygon &polygon)
 
-bool Zone::ParseZoneString(const char *zone_string, int &zone_id, int &colour, Polygon &polygon) {
+bool Zone::ParseZoneString(const char *zone_string, unsigned int &zone_id, int &colour, Polygon &polygon) {
   Debug(3, "Parsing zone string '%s'", zone_string);
 
   char *str_ptr = new char[strlen(zone_string)+1];
@@ -825,7 +825,7 @@ bool Zone::ParseZoneString(const char *zone_string, int &zone_id, int &colour, P
   return result;
 }  // end bool Zone::ParseZoneString(const char *zone_string, int &zone_id, int &colour, Polygon &polygon)
 
-std::vector<Zone> Zone::Load(Monitor *monitor) {
+std::vector<Zone> Zone::Load(const std::shared_ptr<Monitor> &monitor) {
   std::vector<Zone> zones;
 
   std::string sql = stringtf("SELECT Id,Name,Type+0,Units,Coords,AlarmRGB,CheckMethod+0,"

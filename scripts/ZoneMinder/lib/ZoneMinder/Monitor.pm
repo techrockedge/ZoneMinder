@@ -309,9 +309,9 @@ sub Event_Summary {
 
 sub connect {
   my $self = shift;
-  ZoneMinder::Logger::Debug(4, "Connecting");
   if (!ZoneMinder::Memory::zmMemVerify($self)) {
     $self->disconnect();
+    return undef;
   }
   return !undef;
 }
@@ -390,6 +390,19 @@ sub Control {
     }
   }
   return $$self{Control};
+}
+
+sub ImportanceNumber {
+  my $self = shift;
+  if ($$self{Importance} eq 'Not') {
+    return 2;
+  } elsif ($$self{Importance} eq 'Less') {
+    return 1;
+  } elsif ($$self{Importance} eq 'Normal') {
+    return 0;
+  }
+  Warning("Wierd value for Importance $$self{Importance}");
+  return 0;
 }
 
 1;

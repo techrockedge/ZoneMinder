@@ -111,6 +111,7 @@ const CMD_SLOWREV = <?php echo CMD_SLOWREV ?>;
 const CMD_FASTREV = <?php echo CMD_FASTREV ?>;
 const CMD_ZOOMIN = <?php echo CMD_ZOOMIN ?>;
 const CMD_ZOOMOUT = <?php echo CMD_ZOOMOUT ?>;
+const CMD_ZOOMSTOP = <?php echo CMD_ZOOMSTOP ?>;
 const CMD_PAN = <?php echo CMD_PAN ?>;
 const CMD_SCALE = <?php echo CMD_SCALE ?>;
 const CMD_PREV = <?php echo CMD_PREV ?>;
@@ -135,7 +136,9 @@ if ($user) {
   global $config;
   foreach ($config as $name=>$c) {
     if (!$c['Private']) {
-      echo 'const '. $name . ' = \''.preg_replace('/(\n\r?)/', '\\\\$1', $c['Value']).'\';'.PHP_EOL;
+      $value = preg_replace('/(\n\r?)/', '\\\\$1', $c['Value']);
+      $value = preg_replace('/\'/', '\\\\\'', $value);
+      echo 'const '. $name . ' = \''.$value.'\';'.PHP_EOL;
     }
   }
 }

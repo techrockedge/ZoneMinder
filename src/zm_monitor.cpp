@@ -75,12 +75,11 @@ struct Namespace namespaces[] =
 };
 #endif
 
-#define USE_Y_CHANNEL 0
-
 // This is the official SQL (and ordering of the fields) to load a Monitor.
 // It will be used whereever a Monitor dbrow is needed. WHERE conditions can be appended
 std::string load_monitor_sql =
-"SELECT `Id`, `Name`, `ServerId`, `StorageId`, `Type`, `Capturing`+0, `Analysing`+0, `AnalysisSource`, `Recording`+0, `RecordingSource`, `Decoding`+0, "
+"SELECT `Id`, `Name`, `ServerId`, `StorageId`, `Type`, `Capturing`+0, `Analysing`+0, `AnalysisSource`+0, `AnalysisImage`+0,"
+"`Recording`+0, `RecordingSource`+0, `Decoding`+0, "
 "`JanusEnabled`, `JanusAudioEnabled`, "
 "`LinkedMonitors`, `EventStartCommand`, `EventEndCommand`, `AnalysisFPSLimit`, `AnalysisUpdateDelay`, `MaxFPS`, `AlarmMaxFPS`,"
 "`Device`, `Channel`, `Format`, `V4LMultiBuffer`, `V4LCapturesPerFrame`, " // V4L Settings
@@ -96,7 +95,7 @@ std::string load_monitor_sql =
 "`FPSReportInterval`, `RefBlendPerc`, `AlarmRefBlendPerc`, `TrackMotion`, `Exif`,"
 "`RTSPServer`, `RTSPStreamName`,"
 "`ONVIF_URL`, `ONVIF_Username`, `ONVIF_Password`, `ONVIF_Options`, `ONVIF_Event_Listener`, `use_Amcrest_API`, "
-"`SignalCheckPoints`, `SignalCheckColour`, `Importance`-1 FROM `Monitors`";
+"`SignalCheckPoints`, `SignalCheckColour`, `Importance`-1, ZoneCount FROM `Monitors`";
 
 std::string CameraType_Strings[] = {
   "Unknown",
@@ -229,6 +228,7 @@ Monitor::Monitor()
   rtsp_server(false),
   rtsp_streamname(""),
   importance(0),
+  zone_count(0),
   capture_max_fps(0),
   purpose(QUERY),
   last_camera_bytes(0),
@@ -275,6 +275,7 @@ Monitor::Monitor()
   convert_context(nullptr),
   //zones(nullptr),
   privacy_bitmask(nullptr),
+  //linked_monitors_string
   n_linked_monitors(0),
   linked_monitors(nullptr),
   Poll_Trigger_State(false),
@@ -308,7 +309,8 @@ Monitor::Monitor()
 
 /*
    std::string load_monitor_sql =
-   "SELECT `Id`, `Name`, `ServerId`, `StorageId`, `Type`, `Capturing`+0, `Analysing`+0, `AnalysisSource`, `Recording`+0, `RecordingSource`,
+   "SELECT `Id`, `Name`, `ServerId`, `StorageId`, `Type`, `Capturing`+0, `Analysing`+0, `AnalysisSource`+0, `AnalysisImage`+0,"
+   "`Recording`+0, `RecordingSource`+0,
    `Decoding`+0, JanusEnabled, JanusAudioEnabled, "
    "LinkedMonitors, `EventStartCommand`, `EventEndCommand`, "
    "AnalysisFPSLimit, AnalysisUpdateDelay, MaxFPS, AlarmMaxFPS,"
@@ -323,7 +325,7 @@ Monitor::Monitor()
    "FPSReportInterval, RefBlendPerc, AlarmRefBlendPerc, TrackMotion, Exif,"
    "`RTSPServer`,`RTSPStreamName`,
    "`ONVIF_URL`, `ONVIF_Username`, `ONVIF_Password`, `ONVIF_Options`, `ONVIF_Event_Listener`, `use_Amcrest_API`, "
-   "SignalCheckPoints, SignalCheckColour, Importance-1 FROM Monitors";
+   "SignalCheckPoints, SignalCheckColour, Importance-1, ZoneCount FROM Monitors";
 */
 
 void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
@@ -362,6 +364,7 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   capturing = (CapturingOption)atoi(dbrow[col]); col++;
   analysing = (AnalysingOption)atoi(dbrow[col]); col++;
   analysis_source = (AnalysisSourceOption)atoi(dbrow[col]); col++;
+  analysis_image = (AnalysisImageOption)atoi(dbrow[col]); col++;
   recording = (RecordingOption)atoi(dbrow[col]); col++;
   recording_source = (RecordingSourceOption)atoi(dbrow[col]); col++;
 
@@ -370,7 +373,7 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   janus_enabled = dbrow[col] ? atoi(dbrow[col]) : false; col++;
   janus_audio_enabled = dbrow[col] ? atoi(dbrow[col]) : false; col++;
 
-  ReloadLinkedMonitors(dbrow[col]); col++;
+  linked_monitors_string = dbrow[col] ? dbrow[col] : ""; col++;
   event_start_command = dbrow[col] ? dbrow[col] : ""; col++;
   event_end_command = dbrow[col] ? dbrow[col] : ""; col++;
 
@@ -490,6 +493,7 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   rtsp_server = (*dbrow[col] != '0'); col++;
   rtsp_streamname = dbrow[col]; col++;
 
+   /* "`ONVIF_URL`, `ONVIF_Username`, `ONVIF_Password`, `ONVIF_Options`, `ONVIF_Event_Listener`, `use_Amcrest_API`, " */
   onvif_url = std::string(dbrow[col] ? dbrow[col] : ""); col++;
   onvif_username = std::string(dbrow[col] ? dbrow[col] : ""); col++;
   onvif_password = std::string(dbrow[col] ? dbrow[col] : ""); col++;
@@ -508,8 +512,9 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   blue_val = BLUE_VAL_BGRA(signal_check_colour);
   grayscale_val = signal_check_colour & 0xff; /* Clear all bytes but lowest byte */
 
-  importance = dbrow[col] ? atoi(dbrow[col]) : 0;// col++;
+  importance = dbrow[col] ? atoi(dbrow[col]) : 0; col++;
   if (importance < 0) importance = 0; // Should only be >= 0
+  zone_count = dbrow[col] ? atoi(dbrow[col]) : 0;// col++;
 
   // How many frames we need to have before we start analysing
   ready_count = std::max(warmup_count, pre_event_count);
@@ -518,7 +523,6 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   state = IDLE;
   last_signal = true;   // Defaulting to having signal so that we don't get a signal change on the first frame.
                         // Instead initial failure to capture will cause a loss of signal change which I think makes more sense.
-  uint64_t image_size = width * height * colours;
 
   if ( strcmp(config.event_close_mode, "time") == 0 )
     event_close_mode = CLOSE_TIME;
@@ -527,32 +531,11 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   else
     event_close_mode = CLOSE_IDLE;
 
-  mem_size = sizeof(SharedData)
-       + sizeof(TriggerData)
-       + sizeof(VideoStoreData) //Information to pass back to the capture process
-       + (image_buffer_count*sizeof(struct timeval))
-       + (image_buffer_count*image_size)
-       + image_size // alarm_image
-       + 64; /* Padding used to permit aligning the images buffer to 64 byte boundary */
-
-  Debug(1,
-        "mem.size(%zu) SharedData=%zu TriggerData=%zu VideoStoreData=%zu timestamps=%zu images=%dx%" PRIi64 " = %" PRId64 " total=%jd",
-        sizeof(mem_size),
-        sizeof(SharedData),
-        sizeof(TriggerData),
-        sizeof(VideoStoreData),
-        (image_buffer_count * sizeof(struct timeval)),
-        image_buffer_count,
-        image_size,
-        (image_buffer_count * image_size),
-        mem_size);
-
   // Should maybe store this for later use
   std::string monitor_dir = stringtf("%s/%u", storage->Path(), id);
 
   if ( purpose != QUERY ) {
     LoadCamera();
-    ReloadZones();
 
     if ( mkdir(monitor_dir.c_str(), 0755) && ( errno != EEXIST ) ) {
       Error("Can't mkdir %s: %s", monitor_dir.c_str(), strerror(errno));
@@ -571,7 +554,6 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
     }
   }  // end if purpose
 
-  Debug(1, "Loaded monitor %d(%s), %zu zones", id, name.c_str(), zones.size());
 } // Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY)
 
 void Monitor::LoadCamera() {
@@ -787,10 +769,38 @@ std::shared_ptr<Monitor> Monitor::Load(unsigned int p_id, bool load_zones, Purpo
 }
 
 bool Monitor::connect() {
+  ReloadLinkedMonitors();
+  ReloadZones();
+  if (zones.size() != zone_count) {
+    Warning("Monitor %d has incorrect zone_count %d != %zu", id, zone_count, zones.size());
+    zone_count = zones.size();
+  }
   if (mem_ptr != nullptr) {
     Warning("Already connected. Please call disconnect first.");
   }
-  Debug(3, "Connecting to monitor.  Purpose is %d", purpose);
+  if (!camera) LoadCamera();
+  uint64_t image_size = camera->ImageSize();
+  mem_size = sizeof(SharedData)
+       + sizeof(TriggerData)
+       + (zone_count * sizeof(int)) // Per zone scores
+       + sizeof(VideoStoreData) //Information to pass back to the capture process
+       + (image_buffer_count*sizeof(struct timeval))
+       + (image_buffer_count*image_size)
+       + image_size // alarm_image
+       + 64; /* Padding used to permit aligning the images buffer to 64 byte boundary */
+
+  Debug(1,
+        "SharedData=%zu TriggerData=%zu zone_count %d * sizeof int %zu VideoStoreData=%zu timestamps=%zu images=%dx%" PRIi64 " = %" PRId64 " total=%jd",
+        sizeof(SharedData),
+        sizeof(TriggerData),
+        zone_count,
+        sizeof(int),
+        sizeof(VideoStoreData),
+        (image_buffer_count * sizeof(struct timeval)),
+        image_buffer_count,
+        image_size,
+        (image_buffer_count * image_size),
+        mem_size);
 #if ZM_MEM_MAPPED
   mem_file = stringtf("%s/zm.mmap.%u", staticConfig.PATH_MAP.c_str(), id);
   if (purpose != CAPTURE) {
@@ -872,32 +882,37 @@ bool Monitor::connect() {
 
   shared_data = (SharedData *)mem_ptr;
   trigger_data = (TriggerData *)((char *)shared_data + sizeof(SharedData));
-  video_store_data = (VideoStoreData *)((char *)trigger_data + sizeof(TriggerData));
+  zone_scores = (int *)((unsigned long)trigger_data + sizeof(TriggerData));
+  video_store_data = (VideoStoreData *)((unsigned long)zone_scores + (zone_count*sizeof(int)));
   shared_timestamps = (struct timeval *)((char *)video_store_data + sizeof(VideoStoreData));
   shared_images = (unsigned char *)((char *)shared_timestamps + (image_buffer_count*sizeof(struct timeval)));
 
   if (((unsigned long)shared_images % 64) != 0) {
     /* Align images buffer to nearest 64 byte boundary */
-    Debug(3, "Aligning shared memory images to the next 64 byte boundary");
-    shared_images = (uint8_t*)((unsigned long)shared_images + (64 - ((unsigned long)shared_images % 64)));
+    unsigned char * aligned_shared_images = (unsigned char *)((unsigned long)shared_images + (64 - ((unsigned long)shared_images % 64)));
+    Debug(3, "Aligning shared memory images to the next 64 byte boundary %p to %p moved %lu bytes",
+        shared_images, aligned_shared_images,
+        (unsigned long)(aligned_shared_images - shared_images)
+        );
+    shared_images = (unsigned char *)aligned_shared_images;
   }
-  if (!camera) LoadCamera();
 
   image_buffer.resize(image_buffer_count);
   for (int32_t i = 0; i < image_buffer_count; i++) {
-    image_buffer[i] = new Image(width, height, camera->Colours(), camera->SubpixelOrder(), &(shared_images[i*camera->ImageSize()]));
+    image_buffer[i] = new Image(width, height, camera->Colours(), camera->SubpixelOrder(), &(shared_images[i*image_size]));
     image_buffer[i]->HoldBuffer(true); /* Don't release the internal buffer or replace it with another */
   }
   alarm_image.AssignDirect(width, height, camera->Colours(), camera->SubpixelOrder(),
-      &(shared_images[image_buffer_count*camera->ImageSize()]),
-        camera->ImageSize(),
+      &(shared_images[image_buffer_count*image_size]),
+        image_size,
         ZM_BUFTYPE_DONTFREE
         );
   alarm_image.HoldBuffer(true); /* Don't release the internal buffer or replace it with another */
-  Debug(3, "Allocated %zu %zu image buffers", image_buffer.capacity(), image_buffer.size());
+  if (alarm_image.Buffer() + image_size > mem_ptr + mem_size) {
+    Warning("We will exceed memsize by %ld bytes!", alarm_image.Buffer() + image_size - (mem_ptr + mem_size));
+  }
 
   if (purpose == CAPTURE) {
-    curl_global_init(CURL_GLOBAL_DEFAULT); //May not be the appropriate place. Need to do this before any other curl calls, and any other threads start.
     memset(mem_ptr, 0, mem_size);
     shared_data->size = sizeof(SharedData);
     shared_data->analysing = analysing;
@@ -1006,13 +1021,22 @@ bool Monitor::connect() {
 } // Monitor::connect
 
 bool Monitor::disconnect() {
+  zones.clear();
+  if (n_linked_monitors) {
+    for ( int i=0; i < n_linked_monitors; i++ ) {
+      delete linked_monitors[i];
+    }
+    delete[] linked_monitors;
+    linked_monitors = nullptr;
+    n_linked_monitors = 0;
+  }
   if (mem_ptr == nullptr) {
     Debug(1, "Already disconnected");
     return true;
   }
 
+  alarm_image.HoldBuffer(false); /* Allow to reset buffer when we connect */
   if (purpose == CAPTURE) {
-    alarm_image.HoldBuffer(false); /* Allow to reset buffer */
     if (unlink(mem_file.c_str()) < 0) {
       Warning("Can't unlink '%s': %s", mem_file.c_str(), strerror(errno));
     }
@@ -1059,11 +1083,14 @@ bool Monitor::disconnect() {
 
 Monitor::~Monitor() {
   Close();
+  Debug(1, "Done close");
 
   if (mem_ptr != nullptr) {
     if (purpose != QUERY) {
+      Debug(1, "Memsetting");
       memset(mem_ptr, 0, mem_size);
     }  // end if purpose != query
+    Debug(1, "disconnect");
     disconnect();
   }  // end if mem_ptr
 
@@ -1072,6 +1099,7 @@ Monitor::~Monitor() {
   decoder_it = nullptr;
 
   delete storage;
+  Debug(1, "Done storage");
   if (n_linked_monitors) {
     for ( int i=0; i < n_linked_monitors; i++ ) {
       delete linked_monitors[i];
@@ -1080,18 +1108,23 @@ Monitor::~Monitor() {
     linked_monitors = nullptr;
   }
 
+  Debug(1, "Don linked monitors");
   if (video_fifo) delete video_fifo;
   if (audio_fifo) delete audio_fifo;
+  Debug(1, "Don fifo");
   if (dest_frame) av_frame_free(&dest_frame);
+  Debug(1, "Don fifo");
   if (convert_context) {
+  Debug(1, "Don fifo");
     sws_freeContext(convert_context);
     convert_context = nullptr;
   }
+  Debug(1, "Don fifo");
   if (Amcrest_Manager != nullptr) {
+  Debug(1, "Don fifo");
     delete Amcrest_Manager;
-  }
-  if (purpose == CAPTURE) {
-    curl_global_cleanup(); //not sure about this location.
+  } else {
+Debug(1, "No amcrest");
   }
 }  // end Monitor::~Monitor()
 
@@ -1103,7 +1136,6 @@ void Monitor::AddPrivacyBitmask() {
   Image *privacy_image = nullptr;
 
   for (const Zone &zone : zones) {
-  //for (int i=0; i < zones.size(); i++) {
     if (zone.IsPrivacy()) {
       if (!privacy_image) {
         privacy_image = new Image(width, height, 1, ZM_SUBPIX_ORDER_NONE);
@@ -1417,7 +1449,7 @@ int Monitor::actionColour() {
 } // end int Monitor::actionColour(int p_colour)
 
 void Monitor::DumpZoneImage(const char *zone_string) {
-  int exclude_id = 0;
+  unsigned int exclude_id = 0;
   int extra_colour = 0;
   Polygon extra_zone;
 
@@ -1579,7 +1611,6 @@ void Monitor::CheckAction() {
       if (Active()) {
         Info("Received suspend indication at count %d", image_count);
         shared_data->analysing = ANALYSING_NONE;
-        //closeEvent();
       } else {
         Info("Received suspend indication at count %d, but wasn't active", image_count);
       }
@@ -1814,7 +1845,7 @@ bool Monitor::Analyse() {
           } else {
             event->addNote(SIGNAL_CAUSE, "Reacquired");
           }
-          if (USE_Y_CHANNEL && snap->in_frame && (
+          if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame && (
                 ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
                 ||
                 ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
@@ -1900,7 +1931,7 @@ bool Monitor::Analyse() {
               // decoder may not have been able to provide an image
               if (!ref_image.Buffer()) {
                 Debug(1, "Assigning instead of Detecting");
-                if (USE_Y_CHANNEL && snap->in_frame && (
+                if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame && (
                       ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
                       ||
                       ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
@@ -1913,51 +1944,80 @@ bool Monitor::Analyse() {
                   ref_image.Assign(*(snap->image));
                 }
                 alarm_image.Assign(*(snap->image));
-              } else if (!(analysis_image_count % (motion_frame_skip+1))) {
-                Debug(1, "Detecting motion on image %d, image %p", snap->image_index, snap->image);
-                // Get new score.
-                if (USE_Y_CHANNEL && snap->in_frame && (
-                      ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
-                      ||
-                      ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
-                      ) ) {
-                  Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
-                  snap->score = DetectMotion(y_image, zoneSet);
-                } else {
-                  snap->score = DetectMotion(*(snap->image), zoneSet);
-                }
-
-                if (!snap->analysis_image)
-                  snap->analysis_image = new Image(*(snap->image));
-                // lets construct alarm cause. It will contain cause + names of zones alarmed
-                snap->zone_stats.reserve(zones.size());
-                for (const Zone &zone : zones) {
-                  const ZoneStats &stats = zone.GetStats();
-                  stats.DumpToLog("After detect motion");
-                  snap->zone_stats.push_back(stats);
-                  if (zone.Alarmed()) {
-                    if (!snap->alarm_cause.empty()) snap->alarm_cause += ",";
-                    snap->alarm_cause += std::string(zone.Label());
-                    if (zone.AlarmImage())
-                      snap->analysis_image->Overlay(*(zone.AlarmImage()));
-                  }
-                }
-                alarm_image.Assign(*(snap->analysis_image));
-                Debug(3, "After motion detection, score:%d last_motion_score(%d), new motion score(%d)",
-                    score, last_motion_score, snap->score);
-                motion_frame_count += 1;
-                last_motion_score = snap->score;
-
-                if (snap->score) {
-                  if (cause.length()) cause += ", ";
-                  cause += MOTION_CAUSE + std::string(":") + snap->alarm_cause;
-                  noteSetMap[MOTION_CAUSE] = zoneSet;
-                  score += snap->score;
-                } // end if motion_score
               } else {
-                Debug(1, "Skipped motion detection last motion score was %d", last_motion_score);
-                alarm_image.Assign(*(snap->image));
-              }
+                // didn't assign, do motion detection maybe and blending definitely
+                if (!(analysis_image_count % (motion_frame_skip+1))) {
+                  Debug(1, "Detecting motion on image %d, image %p", snap->image_index, snap->image);
+                  // Get new score.
+                  if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame && (
+                        ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
+                        ||
+                        ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
+                        ) ) {
+                    Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
+                    snap->score = DetectMotion(y_image, zoneSet);
+                  } else {
+                    snap->score = DetectMotion(*(snap->image), zoneSet);
+                  }
+
+                  if (!snap->analysis_image)
+                    snap->analysis_image = new Image(*(snap->image));
+                  // lets construct alarm cause. It will contain cause + names of zones alarmed
+                  snap->zone_stats.reserve(zones.size());
+                  int zone_index = 0;
+                  for (const Zone &zone : zones) {
+                    const ZoneStats &stats = zone.GetStats();
+                    stats.DumpToLog("After detect motion");
+                    snap->zone_stats.push_back(stats);
+                    if (zone.Alarmed()) {
+                      if (!snap->alarm_cause.empty()) snap->alarm_cause += ",";
+                      snap->alarm_cause += std::string(zone.Label());
+                      if (zone.AlarmImage())
+                        snap->analysis_image->Overlay(*(zone.AlarmImage()));
+                    }
+                    Debug(1, "Setting zone score %d to %d", zone_index, zone.Score());
+                    zone_scores[zone_index] = zone.Score(); zone_index ++;
+                  }
+                  alarm_image.Assign(*(snap->analysis_image));
+                  Debug(3, "After motion detection, score:%d last_motion_score(%d), new motion score(%d)",
+                      score, last_motion_score, snap->score);
+                  motion_frame_count += 1;
+                  last_motion_score = snap->score;
+
+                  if (snap->score) {
+                    if (cause.length()) cause += ", ";
+                    cause += MOTION_CAUSE + std::string(":") + snap->alarm_cause;
+                    noteSetMap[MOTION_CAUSE] = zoneSet;
+                    score += snap->score;
+                  } // end if motion_score
+                } else {
+                  Debug(1, "Skipped motion detection last motion score was %d", last_motion_score);
+                  alarm_image.Assign(*(snap->image));
+                }
+
+                if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame &&
+                    ( 
+                     ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P) 
+                     ||
+                     ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
+                    )
+                   ) {
+                  Debug(1, "Blending from y-channel");
+                  Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
+                  ref_image.Blend(y_image, ( state==ALARM ? alarm_ref_blend_perc : ref_blend_perc ));
+                } else if (snap->image) {
+                  Debug(1, "Blending full colour image because analysis_image = %d, in_frame=%p and format %d != %d, %d",
+                      analysis_image, snap->in_frame,
+                      (snap->in_frame ? snap->in_frame->format : -1),
+                      AV_PIX_FMT_YUV420P,
+                      AV_PIX_FMT_YUVJ420P
+                      );
+                  ref_image.Blend(*(snap->image), ( state==ALARM ? alarm_ref_blend_perc : ref_blend_perc ));
+                  Debug(1, "Done Blending");
+                } else {
+                  Debug(1, "Not able to blend");
+                }
+              } // end if had ref_image_buffer or not
             } else {
               Debug(1, "no image so skipping motion detection");
             }  // end if has image
@@ -2142,42 +2202,6 @@ bool Monitor::Analyse() {
             } // end if ! event
           } // end if RECORDING
 
-          if ((shared_data->analysing == ANALYSING_ALWAYS) and snap->image) {
-            if (!ref_image.Buffer()) {
-              if (USE_Y_CHANNEL && snap->in_frame && (
-                    ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
-                    ||
-                    ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
-                    ) ) {
-                Debug(1, "Assigning from y-channel");
-                Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
-                ref_image.Assign(y_image);
-              } else if (snap->image) {
-                Debug(1, "Assigning");
-                ref_image.Assign(*(snap->image));
-              }
-            } else {
-              if (USE_Y_CHANNEL && snap->in_frame &&
-                  ( 
-                   ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P) 
-                   ||
-                   ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
-                  )
-                 ) {
-                Debug(1, "Blending from y-channel");
-                Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
-                ref_image.Blend(y_image, ( state==ALARM ? alarm_ref_blend_perc : ref_blend_perc ));
-              } else if (snap->image) {
-                Debug(1, "Blending because %p and format %d != %d, %d", snap->in_frame,
-                    (snap->in_frame ? snap->in_frame->format : -1),
-                    AV_PIX_FMT_YUV420P,
-                    AV_PIX_FMT_YUVJ420P
-                    );
-                ref_image.Blend(*(snap->image), ( state==ALARM ? alarm_ref_blend_perc : ref_blend_perc ));
-                Debug(1, "Done Blending");
-              }
-            } // end if have image
-          } // end if detecting
           last_signal = signal;
         } // end if videostream
       } // end if signal
@@ -2190,9 +2214,9 @@ bool Monitor::Analyse() {
       shared_data->state = state = IDLE;
     } // end if ( trigger_data->trigger_state != TRIGGER_OFF )
 
-    packetqueue.clearPackets(snap);
 
     if (snap->codec_type == AVMEDIA_TYPE_VIDEO) {
+      packetqueue.clearPackets(snap);
       // Only do these if it's a video packet.
       shared_data->last_read_index = snap->image_index;
       analysis_image_count++;
@@ -2258,14 +2282,14 @@ void Monitor::Reload() {
 
 void Monitor::ReloadZones() {
   Debug(3, "Reloading zones for monitor %s have %zu", name.c_str(), zones.size());
-  zones = Zone::Load(this);
+  zones = Zone::Load(shared_from_this());
   Debug(1, "Reloading zones for monitor %s have %zu", name.c_str(), zones.size());
   this->AddPrivacyBitmask();
   //DumpZoneImage();
 } // end void Monitor::ReloadZones()
 
-void Monitor::ReloadLinkedMonitors(const char *p_linked_monitors) {
-  Debug(1, "Reloading linked monitors for monitor %s, '%s'", name.c_str(), p_linked_monitors);
+void Monitor::ReloadLinkedMonitors() {
+  Debug(1, "Reloading linked monitors for monitor %s, '%s'", name.c_str(), linked_monitors_string.c_str());
   if (n_linked_monitors) {
     for (int i=0; i < n_linked_monitors; i++) {
       delete linked_monitors[i];
@@ -2275,77 +2299,37 @@ void Monitor::ReloadLinkedMonitors(const char *p_linked_monitors) {
   }
 
   n_linked_monitors = 0;
-  if ( p_linked_monitors ) {
-    int n_link_ids = 0;
-    unsigned int link_ids[256];
-
-    // This nasty code picks out strings of digits from p_linked_monitors and tries to load them. 
-    char link_id_str[8];
-    char *dest_ptr = link_id_str;
-    const char *src_ptr = p_linked_monitors;
-    while ( 1 ) {
-      dest_ptr = link_id_str;
-      while ( *src_ptr >= '0' && *src_ptr <= '9' ) {
-        if ( (unsigned int)(dest_ptr-link_id_str) < (unsigned int)(sizeof(link_id_str)-1) ) {
-          *dest_ptr++ = *src_ptr++;
-        } else {
-          break;
-        }
-      }
-      // Add the link monitor
-      if ( dest_ptr != link_id_str ) {
-        *dest_ptr = '\0';
-        unsigned int link_id = atoi(link_id_str);
-        if ( link_id > 0 && link_id != id ) {
-          Debug(3, "Found linked monitor id %d", link_id);
-          int j;
-          for ( j = 0; j < n_link_ids; j++ ) {
-            if ( link_ids[j] == link_id )
-              break;
-          }
-          if ( j == n_link_ids ) {
-            // Not already found
-            link_ids[n_link_ids++] = link_id;
-          }
-        }
-      }
-      if ( !*src_ptr )
-        break;
-      while( *src_ptr && (*src_ptr < '0' || *src_ptr > '9') )
-        src_ptr++;
-      if ( !*src_ptr )
-        break;
-    }
-    if ( n_link_ids > 0 ) {
+  if (!linked_monitors_string.empty()) {
+    StringVector link_strings = Split(linked_monitors_string, ',');
+    int n_link_ids = link_strings.size();
+    if (n_link_ids > 0) {
       Debug(1, "Linking to %d monitors", n_link_ids);
       linked_monitors = new MonitorLink *[n_link_ids];
+
       int count = 0;
-      for ( int i = 0; i < n_link_ids; i++ ) {
-        Debug(1, "Checking linked monitor %d", link_ids[i]);
+      for (std::string link : link_strings) {
+        auto colon_position = link.find(':');
+        unsigned int monitor_id = 0;
+        unsigned int zone_id = 0;
+        std::string monitor_name;
+        std::string zone_name;
 
-        std::string sql = stringtf(
-            "SELECT `Id`, `Name` FROM `Monitors` WHERE `Id` = %d",
-            link_ids[i]);
-
-        MYSQL_RES *result = zmDbFetch(sql);
-        if (!result) {
-          continue;
-        }
-
-        int n_monitors = mysql_num_rows(result);
-        if (n_monitors == 1) {
-          MYSQL_ROW dbrow = mysql_fetch_row(result);
-          Debug(1, "Linking to monitor %d %s", atoi(dbrow[0]), dbrow[1]);
-          linked_monitors[count++] = new MonitorLink(link_ids[i], dbrow[1]);
+        if (colon_position != std::string::npos) {
+          // Has a zone specification
+          monitor_id = std::stoul(link.substr(0, colon_position));
+          zone_id = std::stoul(link.substr(colon_position+1, std::string::npos));
         } else {
-          Warning("Can't link to monitor %d, invalid id or database error", link_ids[i]);
+          monitor_id = std::stoul(link);
         }
-        mysql_free_result(result);
+        Debug(1, "Checking linked monitor %d zone %d", monitor_id, zone_id);
+
+        std::shared_ptr<Monitor> linked_monitor = Load(monitor_id, false, QUERY);
+        linked_monitors[count++] = new MonitorLink(linked_monitor, zone_id);
       }  // end foreach link_id
       n_linked_monitors = count;
     }  // end if has link_ids
   }  // end if p_linked_monitors
-}  // end void Monitor::ReloadLinkedMonitors(const char *p_linked_monitors)
+}  // end void Monitor::ReloadLinkedMonitors()
 
 std::vector<std::shared_ptr<Monitor>> Monitor::LoadMonitors(const std::string &where, Purpose purpose) {
   std::string sql = load_monitor_sql + " WHERE " + where;
@@ -2596,7 +2580,6 @@ bool Monitor::Decode() {
   }
 
   if ((!packet->image) and packet->packet.size and !packet->in_frame) {
-    Debug(1, "Decoding ? %s", Decoding_Strings[decoding].c_str());
     if ((decoding == DECODING_ALWAYS)
         or
         ((decoding == DECODING_ONDEMAND) and this->hasViewers() )
@@ -2696,12 +2679,10 @@ bool Monitor::Decode() {
     } // end if have rotation
 
     if (privacy_bitmask) {
-      Debug(3, "Applying privacy");
       capture_image->MaskPrivacy(privacy_bitmask);
     }
 
     if (config.timestamp_on_capture) {
-      Debug(3, "Timestamping");
       TimestampImage(capture_image, packet->timestamp);
     }
 
@@ -2709,7 +2690,6 @@ bool Monitor::Decode() {
     index++;
     index = index % image_buffer_count;
     image_buffer[index]->Assign(*(packet->image));
-    Debug(3, "Assigned shared image %u", index);
     shared_timestamps[index] = zm::chrono::duration_cast<timeval>(packet->timestamp.time_since_epoch());
     shared_data->signal = (capture_image and signal_check_points) ? CheckSignal(capture_image) : true;
     shared_data->last_write_index = index;
@@ -3162,17 +3142,26 @@ int Monitor::PrimeCapture() {
 int Monitor::PreCapture() const { return camera->PreCapture(); }
 int Monitor::PostCapture() const { return camera->PostCapture(); }
 int Monitor::Close() {
+  Debug(1, "Stopping packetqueue");
+  // Wake everyone up
+  packetqueue.stop();
+  Debug(1, "Stopped packetqueue");
+
   // Because the stream indexes may change we have to clear out the packetqueue
   if (decoder) {
+    Debug(1, "Decoder stopping");
     decoder->Stop();
+    Debug(1, "Decoder stopped");
   }
   if (analysis_thread) {
     analysis_thread->Stop();
+    Debug(1, "Analysi stopped");
   }
 
   //ONVIF Teardown
   if (Poller) {
     Poller->Stop();
+    Debug(1, "Polleri stopped");
   }
 #ifdef WITH_GSOAP
   if (onvif_event_listener && (soap != nullptr)) {
@@ -3194,17 +3183,19 @@ int Monitor::Close() {
   if (audio_fifo) {
     delete audio_fifo;
     audio_fifo = nullptr;
+    Debug(1, "audio fifo deleted");
   }
   if (video_fifo) {
     delete video_fifo;
+    Debug(1, "video fifo deleted");
     video_fifo = nullptr;
   }
 
-  // Wake everyone up
-  packetqueue.stop();
 
   if (close_event_thread.joinable()) {
+    Debug(1, "Joining event thread");
     close_event_thread.join();
+    Debug(1, "Joined event thread");
   }
   {
     std::lock_guard<std::mutex> lck(event_mutex);
@@ -3226,6 +3217,7 @@ Monitor::Orientation Monitor::getOrientation() const { return orientation; }
 // This function is deprecated.
 void Monitor::get_ref_image() {
   ZMLockedPacket *snap_lock = nullptr;
+  Warning("get_ref_image is deprecated");
 
   if ( !analysis_it ) 
     analysis_it = packetqueue.get_video_it(true);

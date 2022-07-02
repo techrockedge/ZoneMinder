@@ -20,6 +20,7 @@
 
 require_once('includes/Server.php');
 require_once('includes/Storage.php');
+require_once('includes/Zone.php');
 
 if (!canEdit('Monitors', empty($_REQUEST['mid'])?0:$_REQUEST['mid'])) {
   $view = 'error';
@@ -933,6 +934,14 @@ include('_monitor_source_nvsocket.php');
 ?>
               </td>
             </tr>
+            <tr id="AnalysisImage">
+              <td class="text-right pr-3"><?php echo translate('Analysis Image') ?></td>
+              <td>
+<?php
+        echo htmlSelect('newMonitor[AnalysisImage]', ZM\Monitor::getAnalysisImageOptions(), $monitor->AnalysisImage());
+?>
+              </td>
+            </tr>
             <tr>
               <td class="text-right pr-3"><?php echo translate('AnalysisFPS') ?></td>
               <td><input type="number" name="newMonitor[AnalysisFPSLimit]" value="<?php echo validHtmlStr($monitor->AnalysisFPSLimit()) ?>" min="0" step="any"/></td>
@@ -966,10 +975,22 @@ include('_monitor_source_nvsocket.php');
               <td class="text-right pr-3"><?php echo translate('LinkedMonitors'); echo makeHelpLink('OPTIONS_LINKED_MONITORS') ?></td>
               <td>
 <?php
+      $zones_by_monitor_id = array();
+      foreach (ZM\Zone::find() as $zone) {
+        if (! isset($zones_by_monitor_id[$zone->MonitorId()]) ) {
+          $zones_by_monitor_id[$zone->MonitorId()] = array();
+        }
+        $zones_by_monitor_id[$zone->MonitorId()][] = $zone;
+      }
       $monitor_options = array();
       foreach ($monitors as $linked_monitor) {
-        if ( (!$monitor->Id() || ($monitor->Id()!= $linked_monitor['Id'])) && visibleMonitor($linked_monitor['Id']) ) {
-          $monitor_options[$linked_monitor['Id']] = validHtmlStr($linked_monitor['Name']);
+        if ( (!$monitor->Id() || ($monitor->Id() != $linked_monitor['Id'])) && visibleMonitor($linked_monitor['Id']) ) {
+          $monitor_options[$linked_monitor['Id']] = validHtmlStr($linked_monitor['Name']) . ' : ' . translate('All Zones');
+          if (isset($zones_by_monitor_id[$linked_monitor['Id']])) {
+            foreach ( $zones_by_monitor_id[$linked_monitor['Id']] as $zone) {
+              $monitor_options[$linked_monitor['Id'].':'.$zone->Id()] = validHtmlStr($linked_monitor['Name']). ' : ' . validHtmlStr($zone->Name()) . ' ('.$zone->Type().')';
+            }
+          }
         }
       }
       echo htmlSelect(
@@ -1421,7 +1442,6 @@ echo htmlSelect('newMonitor[ReturnLocation]', $return_options, $monitor->ReturnL
         <tr>
           <td colspan="2"><div id="LocationMap" style="height: 500px; width: 500px;"></div></td>
         </tr>
-            
 <?php
     break;
   default :

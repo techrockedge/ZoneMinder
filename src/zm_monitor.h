@@ -31,6 +31,9 @@
 #include "zm_packet.h"
 #include "zm_packetqueue.h"
 #include "zm_utils.h"
+#include "zm_zone.h"
+
+#include <list>
 #include <memory>
 #include <sys/time.h>
 #include <vector>
@@ -53,7 +56,7 @@ class Group;
 // This is the main class for monitors. Each monitor is associated
 // with a camera and is effectively a collector for events.
 //
-class Monitor {
+class Monitor : public std::enable_shared_from_this<Monitor> {
   friend class MonitorStream;
 
 public:
@@ -78,6 +81,11 @@ public:
     ANALYSIS_PRIMARY=1,
     ANALYSIS_SECONDARY
   } AnalysisSourceOption;
+
+  typedef enum {
+    ANALYSISIMAGE_FULLCOLOUR=1,
+    ANALYSISIMAGE_YCHANNEL
+  } AnalysisImageOption;
 
   typedef enum {
     RECORDING_NONE=1,
@@ -245,8 +253,12 @@ protected:
 
   class MonitorLink {
   protected:
-    unsigned int  id;
-    char      name[64];
+    std::shared_ptr<Monitor>  monitor;
+    unsigned int zone_id;
+    const Zone    *zone;
+    int  zone_index;  // index into zone_scores for our zone
+
+    std::string   name;
 
     bool      connected;
     time_t    last_connect_time;
@@ -263,16 +275,18 @@ protected:
     volatile SharedData  *shared_data;
     volatile TriggerData  *trigger_data;
     volatile VideoStoreData *video_store_data;
+    volatile int * zone_scores;
 
     int        last_state;
     uint64_t   last_event_id;
+    std::vector<Zone> zones;
 
     public:
-      MonitorLink(unsigned int p_id, const char *p_name);
+      MonitorLink(std::shared_ptr<Monitor> p_monitor, unsigned int p_zone_id);
       ~MonitorLink();
 
-      inline unsigned int Id() const { return id; }
-      inline const char *Name() const { return name; }
+      inline unsigned int Id() const { return monitor->Id(); }
+      inline const char *Name() const { return name.c_str(); }
 
       inline bool isConnected() const { return connected && shared_data->valid; }
       inline time_t getLastConnectTime() const { return last_connect_time; }
@@ -343,6 +357,7 @@ protected:
   CapturingOption capturing;          // None, OnDemand, Always
   AnalysingOption analysing;          // None, Always
   AnalysisSourceOption  analysis_source;    // Primary, Secondary
+  AnalysisImageOption   analysis_image;     // FullColour, YChannel
   RecordingOption recording;          // None, OnMotion, Always
   RecordingSourceOption recording_source;   // Primary, Secondary, Both
 
@@ -413,8 +428,8 @@ protected:
   int        pre_event_count;    // How many images to hold and prepend to an alarm event
   int        post_event_count;    // How many unalarmed images must occur before the alarm state is reset
   int        stream_replay_buffer;   // How many frames to store to support DVR functions, IGNORED from this object, passed directly into zms now
-  Seconds section_length;      // How long events should last in continuous modes
-  Seconds min_section_length;   // Minimum event length when using event_close_mode == ALARM
+  Seconds    section_length;      // How long events should last in continuous modes
+  Seconds    min_section_length;   // Minimum event length when using event_close_mode == ALARM
   bool       adaptive_skip;        // Whether to use the newer adaptive algorithm for this monitor
   int        frame_skip;        // How many frames to skip in continuous modes
   int        motion_frame_skip;      // How many frames to skip in motion detection
@@ -435,6 +450,7 @@ protected:
   bool        rtsp_server; // Whether to include this monitor as an rtsp server stream
   std::string rtsp_streamname;      // path in the rtsp url for this monitor
   int         importance;           // Importance of this monitor, affects Connection logging errors.
+  unsigned int         zone_count;
 
   int capture_max_fps;
 
@@ -472,6 +488,7 @@ protected:
   SharedData      *shared_data;
   TriggerData     *trigger_data;
   VideoStoreData  *video_store_data;
+  int             *zone_scores;
 
   struct timeval *shared_timestamps;
   unsigned char *shared_images;
@@ -502,6 +519,7 @@ protected:
 
   const unsigned char  *privacy_bitmask;
 
+  std::string linked_monitors_string;
   int      n_linked_monitors;
   MonitorLink    **linked_monitors;
   std::string   event_start_command;
@@ -771,7 +789,7 @@ public:
 
   void Reload();
   void ReloadZones();
-  void ReloadLinkedMonitors( const char * );
+  void ReloadLinkedMonitors();
 
   bool DumpSettings( char *output, bool verbose );
   void DumpZoneImage( const char *zone_string=0 );

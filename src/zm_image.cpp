@@ -786,7 +786,7 @@ void Image::Assign(const Image &image) {
         return;
       }
     } else {
-      if (new_size > allocation || !buffer) {
+      if ((new_size > allocation) || !buffer) {
         // DumpImgBuffer(); This is also done in AllocImgBuffer
         AllocImgBuffer(new_size);
       }
@@ -799,9 +799,9 @@ void Image::Assign(const Image &image) {
     subpixelorder = image.subpixelorder;
     size = new_size;
     linesize = image.linesize;
+    update_function_pointers();
   }
 
-  update_function_pointers();
   if ( image.buffer != buffer )
     (*fptr_imgbufcpy)(buffer, image.buffer, size);
 }
@@ -2477,7 +2477,6 @@ void Image::Fill(Rgb colour, int density, const Polygon &polygon) {
   colour = rgb_convert(colour, subpixelorder);
 
   size_t n_coords = polygon.GetVertices().size();
-  Debug(1, "vertices %zu", n_coords);
   if (!n_coords) {
     Error("No vertices from polygon!");
     return;

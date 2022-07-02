@@ -187,7 +187,7 @@ function changeScale() {
   var newWidth;
   var newHeight;
   var autoScale;
-  var eventViewer= $j(vid ? '#videoobj' : '#videoFeed');
+  var eventViewer = $j(vid ? '#videoobj' : '#videoFeed');
   var alarmCue = $j('div.alarmCue');
   var bottomEl = $j('#replayStatus');
 
@@ -562,6 +562,22 @@ function streamZoomIn(x, y) {
   }
 }
 
+function clickZoomOut(event) {
+  if (event.ctrlKey) { // allow zoom out by control click.  useful in fullscreen
+    streamZoomStop();
+  } else {
+    streamZoomOut();
+  }
+}
+
+function streamZoomStop() {
+  if (vid) {
+    vjsPanZoom('zoomOut');
+  } else {
+    streamReq({command: CMD_ZOOMSTOP});
+  }
+}
+
 function streamZoomOut() {
   if (vid) {
     vjsPanZoom('zoomOut');
@@ -760,21 +776,21 @@ function progressBarNav() {
 }
 
 function handleClick(event) {
-  var target = event.target;
-  var rect = target.getBoundingClientRect();
-  if (vid) {
-    if (target.id != 'videoobj') return; // ignore clicks on control bar
-    var x = event.offsetX;
-    var y = event.offsetY;
-  } else {
-    var x = event.page.x - rect.left;
-    var y = event.page.y - rect.top;
-  }
+  // target should be the img tag
+  const target = $j(event.target);
+  const width = target.width();
+  const height = target.height();
+
+  const scaleX = parseInt(eventData.Width / width);
+  const scaleY = parseInt(eventData.Height / height);
+  const pos = target.offset();
+  const x = parseInt((event.pageX - pos.left) * scaleX);
+  const y = parseInt((event.pageY - pos.top) * scaleY);
 
   if (event.shift || event.shiftKey) { // handle both jquery and mootools
     streamPan(x, y);
-  } else if (vid && event.ctrlKey) { // allow zoom out by control click.  useful in fullscreen
-    vjsPanZoom('zoomOut', x, y);
+  } else if (event.ctrlKey) { // allow zoom out by control click.  useful in fullscreen
+    streamZoomOut();
   } else {
     streamZoomIn(x, y);
   }
@@ -838,6 +854,11 @@ function getStat() {
       case 'Archived':
       case 'Emailed':
         tdString = eventData[key] ? yesStr : noStr;
+        break;
+      case 'Length':
+        const date = new Date(0); // Have to init it fresh.  setSeconds seems to add time, not set it.
+        date.setSeconds(eventData[key]);
+        tdString = date.toISOString().substr(11, 8);
         break;
       default:
         tdString = eventData[key];
