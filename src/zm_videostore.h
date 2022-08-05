@@ -57,12 +57,10 @@ class VideoStore {
     const AVCodec *audio_out_codec;
     AVCodecContext *audio_out_ctx;
     // Move this into the object so that we aren't constantly allocating/deallocating it on the stack
-    AVPacket *opkt;
+    av_packet_ptr opkt;
 
-    AVFrame *video_in_frame;
-    AVFrame *in_frame;
-    AVFrame *out_frame;
-    AVFrame *hw_frame;
+    av_frame_ptr in_frame;
+    av_frame_ptr out_frame;
 
     SWScale swscale;
     unsigned int packets_written;
@@ -91,6 +89,8 @@ class VideoStore {
     int64_t audio_next_pts;
 
     int max_stream_index;
+
+    size_t reorder_queue_size;
     std::map<int, std::list<std::shared_ptr<ZMPacket>>> reorder_queues;
 
     bool setup_resampler();

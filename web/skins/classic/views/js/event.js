@@ -28,7 +28,7 @@ var zmsBroke = false; //Use alternate navigation if zms has crashed
 var wasHidden = false;
 
 function streamReq(data) {
-  if ( auth_hash ) data.auth = auth_hash;
+  if (auth_hash) data.auth = auth_hash;
   data.connkey = connKey;
   data.view = 'request';
   data.request = 'stream';
@@ -312,11 +312,7 @@ function getCmdResponse(respObj, respText) {
   updateProgressBar();
 
   if (streamStatus.auth) {
-    // Try to reload the image stream.
-    var streamImg = document.getElementById('evtStream');
-    if (streamImg) {
-      streamImg.src = streamImg.src.replace(/auth=\w+/i, 'auth='+streamStatus.auth);
-    }
+    auth_hash = streamStatus.auth;
   } // end if haev a new auth hash
 
   streamCmdTimer = setTimeout(streamQuery, streamTimeout); //Timeout is refresh rate for progressBox and time display
@@ -460,6 +456,7 @@ function streamPrev(action) {
   if (action) {
     $j(".vjsMessage").remove();
     if (prevEventId != 0) {
+      if (vid==null) streamReq({command: CMD_QUIT});
       location.replace(thisUrl + '?view=event&eid=' + prevEventId + filterQuery + sortQuery);
       return;
     }
@@ -495,6 +492,7 @@ function streamNext(action) {
   // We used to try to dynamically update all the bits in the page, which is really complex
   // How about we just reload the page?
   //
+  if (vid==null) streamReq({command: CMD_QUIT});
   location.replace(thisUrl + '?view=event&eid=' + nextEventId + filterQuery + sortQuery);
   return;
   if (vid && ( NextEventDefVideoPath.indexOf('view_video') > 0 )) {
@@ -924,7 +922,7 @@ function initPage() {
     vid.on('volumechange', function() {
       setCookie('volume', vid.volume(), 3600);
     });
-    var cookie = getCookie('volume');
+    const cookie = getCookie('volume');
     if (cookie) vid.volume(cookie);
 
     vid.on('timeupdate', function() {
@@ -932,7 +930,6 @@ function initPage() {
     });
     vid.on('ratechange', function() {
       rate = vid.playbackRate() * 100;
-      console.log("rate change " + rate);
       $j('select[name="rate"]').val(rate);
       setCookie('zmEventRate', rate, 3600);
     });
@@ -949,7 +946,7 @@ function initPage() {
       if (!$j('#videoFeed')) {
         console.log('No element with id tag videoFeed found.');
       } else {
-        var streamImg = $j('#videoFeed img');
+        let streamImg = $j('#videoFeed img');
         if (!streamImg) {
           streamImg = $j('#videoFeed object');
         }
