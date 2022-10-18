@@ -28,9 +28,7 @@
 #include "zm_event.h"
 #include "zm_fifo.h"
 #include "zm_image.h"
-#if 0
-#include "zm_monitorlink_expression.h"
-#endif
+#include "zm_mqtt.h"
 #include "zm_packet.h"
 #include "zm_packetqueue.h"
 #include "zm_utils.h"
@@ -230,7 +228,7 @@ protected:
     char alarm_cause[256];
     char video_fifo_path[64];
     char audio_fifo_path[64];
-
+    char janus_pin[64];
   } SharedData;
 
   enum TriggerState : uint32 {
@@ -338,24 +336,27 @@ protected:
     //helper class for CURL
     static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp);
     bool Janus_Healthy;
+    bool Use_RTSP_Restream;
     std::string janus_session;
     std::string janus_handle;
     std::string janus_endpoint;
     std::string stream_key;
     std::string rtsp_username;
     std::string rtsp_password;
+    TimePoint   rtsp_auth_time;
     std::string rtsp_path;
+    std::string profile_override;
 
   public:
     explicit JanusManager(Monitor *parent_);
     ~JanusManager();
+    void load_from_monitor();
     int add_to_janus();
     int check_janus();
     int remove_from_janus();
     int get_janus_session();
     int get_janus_handle();
     int get_janus_plugin();
-    std::string get_stream_key();
   };
 
 
@@ -375,6 +376,10 @@ protected:
   DecodingOption  decoding;   // Whether the monitor will decode h264/h265 packets
   bool            janus_enabled;      // Whether we set the h264/h265 stream up on janus
   bool            janus_audio_enabled;      // Whether we tell Janus to try to include audio.
+  std::string     janus_profile_override;   // The Profile-ID to force the stream to use.
+  bool            janus_use_rtsp_restream;  // Point Janus at the ZM RTSP output, rather than the camera directly.
+  std::string     janus_pin;  // For security, we generate a pin required to view the stream.
+  int             janus_rtsp_user;          // User Id of a user to use for auth to RTSP_Server
 
   std::string protocol;
   std::string method;
@@ -529,6 +534,12 @@ protected:
 
   std::vector<Zone> zones;
 
+#if MOSQUITTOPP_FOUND
+  bool                      mqtt_enabled;
+  std::vector<std::string>  mqtt_subscriptions;
+  std::unique_ptr<MQTT> mqtt;
+#endif
+
   const unsigned char  *privacy_bitmask;
 
   std::string linked_monitors_string;
@@ -631,6 +642,10 @@ public:
   bool JanusAudioEnabled() {
     return janus_audio_enabled;
   }
+  inline const char* get_stream_key() {
+    return shared_data->janus_pin;
+  }
+
   bool OnvifEnabled() {
     return onvif_event_listener;
   }
@@ -794,6 +809,7 @@ public:
   bool Decode();
   bool Poll();
   void DumpImage( Image *dump_image ) const;
+  std::string Substitute(const std::string &format, SystemTimePoint ts_time) const;
   void TimestampImage(Image *ts_image, SystemTimePoint ts_time) const;
   Event *openEvent(
       const std::shared_ptr<ZMPacket> &snap,

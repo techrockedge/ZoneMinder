@@ -22,6 +22,7 @@
 #include "zm_config.h"
 #include "zm_logger.h"
 #include <array>
+#include <cctype>
 #include <cstdarg>
 #include <cstring>
 #include <fcntl.h> /* Definition of AT_* constants */
@@ -375,6 +376,27 @@ std::string UriDecode(const std::string &encoded) {
     } else {
       retbuf.push_back(*src++);
     }
+  }
+  return retbuf;
+}
+
+std::string UriEncode(const std::string &value) {
+  const char *src = value.c_str();
+  std::string retbuf;
+  retbuf.reserve(value.length() * 3); // at most all characters get replaced with the escape
+
+  char tmp[5] = "";
+  while (*src) {
+    std::string::value_type c = *src;
+    if (c == ' ') {
+      retbuf.append("%%20");
+    } else if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      retbuf.push_back(c);
+    } else {
+      sprintf(tmp, "%%%02X", c);
+      retbuf.append(tmp);
+    }
+    src++;
   }
   return retbuf;
 }

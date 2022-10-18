@@ -58,6 +58,7 @@ Event::Event(
   max_score(-1),
   //path(""),
   //snapshit_file(),
+  snapshot_file_written(false),
   //alarm_file(""),
   videoStore(nullptr),
   //video_file(""),
@@ -75,7 +76,7 @@ Event::Event(
 
   if (start_time.time_since_epoch() == Seconds(0)) {
     Warning("Event has zero time, setting to now");
-    start_time = now;
+    end_time = start_time = now;
   } else if (start_time > now) {
     char buffer[26];
     char buffer_now[26];
@@ -91,7 +92,7 @@ Event::Event(
     Error("StartDateTime in the future. Difference: %" PRIi64 " s\nstarttime: %s\nnow: %s",
           static_cast<int64>(std::chrono::duration_cast<Seconds>(now - start_time).count()),
           buffer, buffer_now);
-    start_time = now;
+    end_time = start_time = now;
   }
 
   unsigned int state_id = 0;
@@ -175,7 +176,7 @@ Event::~Event() {
 
   std::string sql = stringtf(
       "UPDATE Events SET Name='%s%" PRIu64 "', EndDateTime = from_unixtime(%ld), Length = %.2f, Frames = %d, AlarmFrames = %d, TotScore = %d, AvgScore = %d, MaxScore = %d, DefaultVideo='%s' WHERE Id = %" PRIu64 " AND Name='New Event'",
-      monitor->EventPrefix(), id, std::chrono::system_clock::to_time_t(end_time),
+      monitor->Substitute(monitor->EventPrefix(), start_time).c_str(), id, std::chrono::system_clock::to_time_t(end_time),
       delta_time.count(),
       frames, alarm_frames,
       tot_score, static_cast<uint32>(alarm_frames ? (tot_score / alarm_frames) : 0), max_score,
@@ -412,10 +413,11 @@ void Event::AddFrame(const std::shared_ptr<ZMPacket>&packet) {
 
     Debug(1, "frames %d, score %d max_score %d", frames, score, max_score);
     // If this is the first frame, we should add a thumbnail to the event directory
-    if ((frames == 1) || (score > max_score)) {
+    if ((frames == 1) || (score > max_score) || (!snapshot_file_written)) {
       write_to_db = true; // web ui might show this as thumbnail, so db needs to know about it.
       Debug(1, "Writing snapshot to %s", snapshot_file.c_str());
       WriteFrameImage(packet->image, packet->timestamp, snapshot_file.c_str());
+      snapshot_file_written = true;
     } else {
       Debug(1, "Not Writing snapshot because frames %d score %d > max %d", frames, score, max_score);
     }

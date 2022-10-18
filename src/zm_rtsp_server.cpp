@@ -136,7 +136,7 @@ int main(int argc, char *argv[]) {
 
   HwCapsDetect();
 
-  std::string where = "`Function` != 'None' AND `RTSPServer` != false";
+  std::string where = "`Capturing` != 'None' AND `RTSPServer` != false";
   if (staticConfig.SERVER_ID)
     where += stringtf(" AND `ServerId`=%d", staticConfig.SERVER_ID);
   if (monitor_id > 0)
@@ -149,6 +149,7 @@ int main(int argc, char *argv[]) {
 
   std::shared_ptr<xop::EventLoop> eventLoop(new xop::EventLoop());
 	std::shared_ptr<xop::RtspServer> rtspServer = xop::RtspServer::Create(eventLoop.get());
+  rtspServer->SetVersion("ZoneMinder RTSP Server");
 
   if (config.opt_use_auth) {
     std::shared_ptr<ZM_RtspServer_Authenticator> authenticator(new ZM_RtspServer_Authenticator());

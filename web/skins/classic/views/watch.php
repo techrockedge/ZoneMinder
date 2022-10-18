@@ -65,8 +65,14 @@ foreach ($displayMonitors as &$row) {
   unset($row);
 } # end foreach Monitor
 
-if ($monitor_index == -1) {
-  ZM\Error("How did we not find monitor_index?");
+if ($mid and ($monitor_index == -1)) {
+  $monitor = ZM\Monitor::find_one(array('Id'=>$mid));
+  if (!$monitor) {
+    ZM\Error("No monitor found for $mid");
+  } else {
+    $monitor_index = count($monitors);
+    $monitors[] = $monitor;
+  }
 }
 
 if (!$mid) {

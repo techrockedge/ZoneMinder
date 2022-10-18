@@ -146,6 +146,9 @@ public static function getStatuses() {
     'Decoding'  => 'Always',
     'JanusEnabled'   => array('type'=>'boolean','default'=>0),
     'JanusAudioEnabled'   => array('type'=>'boolean','default'=>0),
+    'Janus_Profile_Override'   => '',
+    'Janus_Use_RTSP_Restream'   => array('type'=>'boolean','default'=>0),
+    'Janus_RTSP_User'           => null,
     'LinkedMonitors' => array('type'=>'set', 'default'=>null),
     'Triggers'  =>  array('type'=>'set','default'=>''),
     'EventStartCommand' => '',
@@ -181,8 +184,8 @@ public static function getStatuses() {
     'Deinterlacing' =>  0,
     'DecoderHWAccelName'  =>  null,
     'DecoderHWAccelDevice'  =>  null,
-    'SaveJPEGs' =>  3,
-    'VideoWriter' =>  '0',
+    'SaveJPEGs' =>  2,
+    'VideoWriter' =>  '2',
     'OutputCodec' =>  null,
     'Encoder'     =>  'auto',
     'OutputContainer' => null,
@@ -198,7 +201,7 @@ public static function getStatuses() {
     'LabelFormat' => '%N - %d/%m/%y %H:%M:%S',
     'LabelX'      =>  0,
     'LabelY'      =>  0,
-    'LabelSize'   =>  1,
+    'LabelSize'   =>  2,
     'ImageBufferCount'  =>  3,
     'MaxImageBufferCount'  =>  0,
     'WarmupCount' =>  0,
@@ -243,6 +246,8 @@ public static function getStatuses() {
     'RTSPServer' => array('type'=>'boolean', 'default'=>0),
     'RTSPStreamName'  => '',
     'Importance'      =>  'Normal',
+    'MQTT_Enabled'   => array('type'=>'boolean','default'=>0),
+    'MQTT_Subscriptions'  =>  '',
   );
   private $status_fields = array(
     'Status'  =>  null,
@@ -264,6 +269,22 @@ public static function getStatuses() {
     'ArchivedEvents' =>  array('type'=>'integer', 'default'=>null, 'do_not_update'=>1),
     'ArchivedEventDiskSpace' =>  array('type'=>'integer', 'default'=>null, 'do_not_update'=>1),
   );
+  public function Janus_Pin() {
+    if (!$this->{'JanusEnabled'}) return '';
+
+    if ((!defined('ZM_SERVER_ID')) or ( property_exists($this, 'ServerId') and (ZM_SERVER_ID==$this->{'ServerId'}) )) {
+      $cmd = getZmuCommand(' --janus-pin -m '.$this->{'Id'});
+      $output = shell_exec($cmd);
+      Debug("Running $cmd output: $output");
+      return $output ? trim($output) : $output;
+    } else if ($this->ServerId()) {
+      $result = $this->Server()->SendToApi('/monitors/'.$this->{'Id'}.'.json');
+      $json = json_decode($result, true);
+      return ((isset($json['monitor']) and isset($json['monitor']['Monitor']) and isset($json['monitor']['Monitor']['Janus_Pin'])) ? $json['monitor']['Monitor']['Janus_Pin'] : '');
+    } else {
+      Error('Server not assigned to Monitor in a multi-server setup. Please assign a server to the Monitor.');
+    }
+  }
 
   public function Control() {
     if (!property_exists($this, 'Control')) {
@@ -278,13 +299,79 @@ public static function getStatuses() {
 
   public function Server() {
     if (!property_exists($this, 'Server')) {
-      if ($this->ServerId())
+      if ($this->ServerId()) {
         $this->{'Server'} = Server::find_one(array('Id'=>$this->{'ServerId'}));
+        if (!$this->{'Server'}) {
+          $this->{'Server'} = new Server();
+        }
+      }
       if (!property_exists($this, 'Server')) {
         $this->{'Server'} = new Server();
       }
     }
     return $this->{'Server'};
+  }
+
+  public function Path($new=null) {
+    // set the new value if requested
+    if ($new !== null) {
+      $this->{'Path'} = $new;
+    }
+    // empty value or old auth values terminate
+    if (!isset($this->{'Path'}) or ($this->{'Path'}==''))
+      return '';
+
+    // extract the authentication part from the path given
+    $values = extract_auth_values_from_url($this->{'Path'});
+
+    // If no values for User and Pass fields are present then terminate
+    if (count($values) !== 2) {
+      return $this->{'Path'};
+    }
+
+    $old_us = isset($this->{'User'}) ? $this->{'User'} : '';
+    $old_ps = isset($this->{'Pass'}) ? $this->{'Pass'} : '';
+    $us = $values[0];
+    $ps = $values[1];
+
+    // Update the auth fields if they were empty and remove them from the path
+    // or if they are equal between the path and field
+    if ( (!$old_us && !$old_ps) || ($us == $old_us && $ps == $old_ps) ) {
+      $this->{'Path'} = str_replace("$us:$ps@", '', $this->{'Path'});
+      $this->{'User'} = $us;
+      $this->{'Pass'} = $ps;
+    }
+    return $this->{'Path'};
+  }
+
+  public function User($new=null) {
+    if ($new !== null) {
+      // no url check if the update has different value
+      $this->{'User'} = $new;
+    }
+
+    if (isset($this->{'User'}) and $this->{'User'} != '')
+      return $this->{'User'};
+
+    // Only try to update from path if the field is empty
+    $values = extract_auth_values_from_url($this->Path());
+    $this->{'User'} = count($values) == 2 ? $values[0] : '';
+    return $this->{'User'};
+  }
+
+  public function Pass($new=null) {
+    if ($new !== null) {
+      // no url check if the update has different value
+      $this->{'Pass'} = $new;
+    }
+
+    if (isset($this->{'Pass'}) and $this->{'Pass'} != '')
+      return $this->{'Pass'};
+
+    // Only try to update from path if the field is empty
+    $values = extract_auth_values_from_url($this->Path());
+    $this->{'Pass'} = count($values) == 2 ? $values[1] : '';
+    return $this->{'Pass'};
   }
 
   public function __call($fn, array $args) {
@@ -449,31 +536,7 @@ public static function getStatuses() {
         }
       }
     } else if ($this->ServerId()) {
-      $Server = $this->Server();
-
-      $url = $Server->UrlToApi().'/monitors/daemonControl/'.$this->{'Id'}.'/'.$mode.'/zmc.json';
-      if (ZM_OPT_USE_AUTH) {
-        if (ZM_AUTH_RELAY == 'hashed') {
-          $url .= '?auth='.generateAuthHash(ZM_AUTH_HASH_IPS);
-        } else if (ZM_AUTH_RELAY == 'plain') {
-          $url .= '?user='.$_SESSION['username'];
-          $url .= '?pass='.$_SESSION['password'];
-        } else {
-          Error('Multi-Server requires AUTH_RELAY be either HASH or PLAIN');
-          return;
-        }
-      }
-      Debug('sending command to '.$url);
-
-      $context = stream_context_create();
-      try {
-        $result = file_get_contents($url, false, $context);
-        if ($result === FALSE) { /* Handle error */
-          Error("Error restarting zmc using $url");
-        }
-      } catch (Exception $e) {
-        Error("Except $e thrown trying to restart zmc");
-      }
+      $result = $this->Server()->SendToApi('/monitors/daemonControl/'.$this->{'Id'}.'/'.$mode.'/zmc.json');
     } else {
       Error('Server not assigned to Monitor in a multi-server setup. Please assign a server to the Monitor.');
     }
@@ -654,32 +717,8 @@ public static function getStatuses() {
       }
       socket_close($socket);
     } else if ($this->ServerId()) {
-      $Server = $this->Server();
-
-      $url = $Server->UrlToApi().'/monitors/daemonControl/'.$this->{'Id'}.'/'.$command.'/zmcontrol.pl.json';
-      if (ZM_OPT_USE_AUTH) {
-        if (ZM_AUTH_RELAY == 'hashed') {
-          $url .= '?auth='.generateAuthHash(ZM_AUTH_HASH_IPS);
-        } else if (ZM_AUTH_RELAY == 'plain') {
-          $url .= '?user='.$_SESSION['username'];
-          $url .= '?pass='.$_SESSION['password'];
-        } else if (ZM_AUTH_RELAY == 'none') {
-          $url .= '?user='.$_SESSION['username'];
-        }
-      }
-      Debug('sending command to '.$url);
-
-      $context = stream_context_create();
-      try {
-        $result = file_get_contents($url, false, $context);
-        if ($result === FALSE) { /* Handle error */
-          Error("Error sending command using $url");
-          return false;
-        }
-      } catch (Exception $e) {
-        Error("Exception $e thrown trying to send command to $url");
-        return false;
-      }
+      $result = $this->Server()->SendToApi('/monitors/daemonControl/'.$this->{'Id'}.'/'.$command.'/zmcontrol.pl.json');
+      return $result;
     } else {
       Error('Server not assigned to Monitor in a multi-server setup. Please assign a server to the Monitor.');
       return false;
@@ -747,33 +786,19 @@ public static function getStatuses() {
     }
     
     if ($this->ServerId()) {
-      $Server = $this->Server();
+      $result = $this->Server()->SendToApi('/monitors/alarm/id:'.$this->{'Id'}.'/command:'.$cmd.'.json');
 
-      $url = $Server->UrlToApi().'/monitors/alarm/id:'.$this->{'Id'}.'/command:'.$cmd.'.json';
-      $auth_relay = get_auth_relay();
-      if ($auth_relay) $url .= '?'.$auth_relay;
-
-      Debug('sending command to '.$url);
-
-      $context = stream_context_create();
-      try {
-        $result = file_get_contents($url, false, $context);
-        if ($result === FALSE) { /* Handle error */
-          Error('Error sending command using '.$url);
-          return false;
-        }
-        Debug('Result '.$result);
-        $json = json_decode($result, true);
-        return $json['status'];
-
-      } catch (Exception $e) {
-        Error("Exception $e thrown trying to send command to $url");
+      if ($result === FALSE) { /* Handle error */
+        Error('Error sending command using '.$url);
         return false;
       }
+      $json = json_decode($result, true);
+      return $json['status'];
     } // end if we are on the recording server
     Error('Server not assigned to Monitor in a multi-server setup. Please assign a server to the Monitor.');
     return false;
   }
+
   function TriggerOn() {
     $output = $this->AlarmCommand('on');
     if ($output and preg_match('/Alarmed event id: (\d+)$/', $output, $matches)) {
@@ -841,12 +866,10 @@ public static function getStatuses() {
  */
   function getStreamHTML($options) {
     if (isset($options['scale']) and $options['scale'] != '' and $options['scale'] != 'fixed') {
-      Debug("Have scale:" . $options['scale']);
-      if ( $options['scale'] != 'auto' && $options['scale'] != '0' ) {
-        #ZM\Warning('Setting dimensions from scale:'.$options['scale']);
+      if ($options['scale'] != 'auto' && $options['scale'] != '0') {
         $options['width'] = reScale($this->ViewWidth(), $options['scale']).'px';
         $options['height'] = reScale($this->ViewHeight(), $options['scale']).'px';
-      } else if ( ! ( isset($options['width']) or isset($options['height']) ) ) {
+      } else if (!(isset($options['width']) or isset($options['height']))) {
         $options['width'] = '100%';
         $options['height'] = 'auto';
       }
@@ -854,41 +877,35 @@ public static function getStatuses() {
       $options['scale'] = 100;
       # scale is empty or 100
       # There may be a fixed width applied though, in which case we need to leave the height empty
-      if ( ! ( isset($options['width']) and $options['width'] ) ) {
+      if (!(isset($options['width']) and $options['width']) or ($options['width']=='auto')) {
         # Havn't specified width.  If we specified height, then we should
         # use a width that keeps the aspect ratio, otherwise no scaling, 
         # no dimensions, so assume the dimensions of the Monitor
 
-        if ( ! (isset($options['height']) and $options['height']) ) {
+        if (!(isset($options['height']) and $options['height'])) {
           # If we havn't specified any scale or dimensions, then we must be using CSS to scale it in a dynamic way. Can't make any assumptions.
-          #$options['width'] = $monitor->ViewWidth().'px';
-          #$options['height'] = $monitor->ViewHeight().'px';
         }
       } else {
-        #ZM\Warning("Have width ".$options['width']);
-        if ( preg_match('/^(\d+)px$/', $options['width'], $matches) ) {
+        if (preg_match('/^(\d+)px$/', $options['width'], $matches)) {
           $scale = intval(100*$matches[1]/$this->ViewWidth());
-          #ZM\Warning("Scale is $scale");
-          if ( $scale < $options['scale'] )
+          if ($scale < $options['scale'])
             $options['scale'] = $scale;
-        } else if ( preg_match('/^(\d+)%$/', $options['width'], $matches) ) {
+        } else if (preg_match('/^(\d+)%$/', $options['width'], $matches)) {
           $scale = intval($matches[1]);
-          if ( $scale < $options['scale'] )
+          if ($scale < $options['scale'])
             $options['scale'] = $scale;
         } else {
           $backTrace = debug_backtrace();
-          $file = $backTrace[1]['file'];
-          $line = $backTrace[1]['line'];
-          Warning('Invalid value for width: '.$options['width']. ' from '.$file.':'.$line);
+          Warning('Invalid value for width: '.$options['width']. ' from '.print_r($backTrace, true));
         }
       }
     }
-    if ( ! isset($options['mode'] ) ) {
+    if (!isset($options['mode'])) {
       $options['mode'] = 'stream';
     }
-    if ( ! isset($options['width'] ) )
+    if (!isset($options['width']) or $options['width'] == 'auto')
       $options['width'] = 0;
-    if ( ! isset($options['height'] ) )
+    if (!isset($options['height']) or $options['height'] == 'auto')
       $options['height'] = 0;
 
     if (!isset($options['maxfps'])) {

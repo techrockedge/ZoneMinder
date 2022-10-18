@@ -385,13 +385,7 @@ bool MonitorStream::sendFrame(Image *image, SystemTimePoint timestamp) {
 
     /* double pts = */ vid_stream->EncodeFrame(send_image->Buffer(), send_image->Size(), config.mpeg_timed_frames, delta_time.count());
   } else {
-    if (temp_img_buffer_size < send_image->Size()) {
-      Debug(1, "Resizing image buffer from %zu to %u",
-          temp_img_buffer_size, send_image->Size());
-      delete[] temp_img_buffer;
-      temp_img_buffer = new uint8_t[send_image->Size()];
-      temp_img_buffer_size = send_image->Size();
-    }
+    reserveTempImgBuffer(send_image->Size());
 
     int img_buffer_size = 0;
     unsigned char *img_buffer = temp_img_buffer;
@@ -427,10 +421,8 @@ bool MonitorStream::sendFrame(Image *image, SystemTimePoint timestamp) {
         ||
         (fwrite(img_buffer, img_buffer_size, 1, stdout) != 1)
        ) {
-      if (!zm_terminate) {
-        // If the pipe was closed, we will get signalled SIGPIPE to exit, which will set zm_terminate
-        Warning("Unable to send stream frame: %s", strerror(errno));
-      }
+      // If the pipe was closed, we will get signalled SIGPIPE to exit, which will set zm_terminate
+      Debug(1, "Unable to send stream frame: %s, zm_terminate: %d", strerror(errno), zm_terminate);
       return false;
     }
     fputs("\r\n", stdout);
@@ -532,6 +524,12 @@ void MonitorStream::runStream() {
   } else {
     Debug(2, "Not using playback_buffer");
   } // end if connkey && playback_buffer
+    
+  std::thread command_processor;
+  if (connkey) {
+    command_processor = std::thread(&MonitorStream::checkCommandQueue, this);
+  }
+
 
   while (!zm_terminate) {
     if (feof(stdout)) {
@@ -546,23 +544,6 @@ void MonitorStream::runStream() {
     monitor->setLastViewed();
 
     bool was_paused = paused;
-    bool got_command = false; // commands like zoom should output a frame even if paused
-    if (connkey) {
-      while (checkCommandQueue() && !zm_terminate) {
-        Debug(2, "checking command Queue for connkey: %d", connkey);
-        // Loop in here until all commands are processed.
-        Debug(2, "Have checking command Queue for connkey: %d", connkey);
-        got_command = true;
-      }
-      if (zm_terminate) break;
-      // Update modified time of the socket .lock file so that we can tell which ones are stale.
-      if (now - last_comm_update > Hours(1)) {
-        touch(sock_path_lock);
-        last_comm_update = now;
-      }
-    } else {
-      Debug(1, "No connkey");
-    }  // end if connkey
     if (!checkInitialised()) {
       if (!loadMonitor(monitor_id)) {
         if (!sendTextFrame("Not connected")) {
@@ -868,7 +849,14 @@ void MonitorStream::runStream() {
   if (zm_terminate)
     Debug(1, "zm_terminate");
 
-  closeComms();
+  if (connkey) {
+    if (command_processor.joinable()) {
+      Debug(1, "command_processor is joinable");
+      command_processor.join();
+    } else {
+      Debug(1, "command_processor is not joinable");
+    }
+  }
 } // end MonitorStream::runStream
 
 void MonitorStream::SingleImage(int scale) {

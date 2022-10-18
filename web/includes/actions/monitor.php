@@ -62,6 +62,7 @@ if ($action == 'save') {
       }
     }
     $newMonitor['ManufacturerId'] = $newManufacturer->Id();
+    unset($newMonitor['Manufacturer']);
   }
 
   if (!$newMonitor['ModelId'] and ($newMonitor['Model'] != '')) {
@@ -77,6 +78,7 @@ if ($action == 'save') {
       }
     }
     $newMonitor['ModelId'] = $newModel->Id();
+    unset($newMonitor['Model']);
   }
 
   $monitor = new ZM\Monitor($mid);
@@ -91,6 +93,7 @@ if ($action == 'save') {
       'DecodingEnabled' => 0,
       'JanusEnabled' => 0,
       'JanusAudioEnabled' => 0,
+      'Janus_Use_RTSP_Restream' => 0,
       'Exif' => 0,
       'RTSPDescribe' => 0,
       'V4LMultiBuffer'  => '',
@@ -98,6 +101,7 @@ if ($action == 'save') {
       'Method' => 'raw',
       'GroupIds'  =>  array(),
       'LinkedMonitors'  => array(),
+      'MQTT_Enabled'  =>  0,
       'RTSPServer' => 0
       );
 

@@ -103,7 +103,7 @@ window.addEventListener("DOMContentLoaded", function onSkinDCL() {
 
 // 'data-on-click-this' calls the global function in the attribute value with the element when a click happens.
 function dataOnClickThis() {
-  document.querySelectorAll("a[data-on-click-this], button[data-on-click-this], input[data-on-click-this]").forEach(function attachOnClick(el) {
+  document.querySelectorAll("a[data-on-click-this], button[data-on-click-this], input[data-on-click-this], span[data-on-click-this]").forEach(function attachOnClick(el) {
     var fnName = el.getAttribute("data-on-click-this");
     if ( !window[fnName] ) {
       console.error("Nothing found to bind to " + fnName + " on element " + el.name);
@@ -334,7 +334,7 @@ if ( currentView != 'none' && currentView != 'login' ) {
   function insertModalHtml(name, html) {
     var modal = $j('#' + name);
 
-    if ( modal.length ) {
+    if (modal.length) {
       modal.replaceWith(html);
     } else {
       $j("body").append(html);
@@ -360,13 +360,13 @@ if ( currentView != 'none' && currentView != 'login' ) {
           if (error == 'Unauthorized') {
             window.location.reload(true);
           }
-          if ( ! jqxhr.responseText ) {
+          if (!jqxhr.responseText) {
             console.log("No responseText in jqxhr");
             console.log(jqxhr);
             return;
           }
           console.log("Response Text: " + jqxhr.responseText.replace(/(<([^>]+)>)/gi, ''));
-          if ( textStatus != "timeout" ) {
+          if (textStatus != "timeout") {
           // The idea is that this should only fail due to auth, so reload the page
           // which should go to login if it can't stay logged in.
             window.location.reload(true);
@@ -375,29 +375,30 @@ if ( currentView != 'none' && currentView != 'login' ) {
   }
 
   function setNavBar(data) {
-    if ( !data ) {
+    if (!data) {
       console.error("No data in setNavBar");
       return;
     }
-    if ( data.auth ) {
-      if ( data.auth != auth_hash ) {
+    if (data.auth) {
+      if (data.auth != auth_hash) {
         console.log("Update auth_hash to "+data.auth);
         // Update authentication token.
         auth_hash = data.auth;
       }
     }
-    if ( data.auth_relay ) {
+    if (data.auth_relay) {
       auth_relay = data.auth_relay;
     }
     // iterate through all the keys then update each element id with the same name
     for (var key of Object.keys(data)) {
       if ( key == "auth" ) continue;
+      if ( key == "auth_relay" ) continue;
       if ( $j('#'+key).hasClass("show") ) continue; // don't update if the user has the dropdown open
       if ( $j('#'+key).length ) $j('#'+key).replaceWith(data[key]);
       if ( key == 'getBandwidthHTML' ) bwClickFunction();
     }
   }
-}
+} // end if ( currentView != 'none' && currentView != 'login' )
 
 //Shows a message if there is an error in the streamObj or the stream doesn't exist.  Returns true if error, false otherwise.
 function checkStreamForErrors(funcName, streamObj) {
@@ -441,7 +442,7 @@ function secsToTime( seconds ) {
     }
     timeString = timeHours+":"+timeMins+":"+timeSecs;
   }
-  return ( timeString );
+  return timeString;
 }
 
 function submitTab(evt) {
@@ -466,10 +467,10 @@ function submitThisForm() {
  * @param {DOMString} name The name of the checkboxes to toggle.
  */
 function updateFormCheckboxesByName( headerCheckbox ) {
-  var name = headerCheckbox.getAttribute("data-checkbox-name");
-  var form = headerCheckbox.form;
-  var checked = headerCheckbox.checked;
-  for (var i = 0; i < form.elements.length; i++) {
+  const name = headerCheckbox.getAttribute("data-checkbox-name");
+  const form = headerCheckbox.form;
+  const checked = headerCheckbox.checked;
+  for (let i = 0, len=form.elements.length; i < len; i++) {
     if (form.elements[i].name.indexOf(name) == 0) {
       form.elements[i].checked = checked;
     }
@@ -712,11 +713,13 @@ function getLogoutModal() {
       .fail(logAjaxFail);
 }
 function clickLogout() {
-  if ( ! $j('#modalLogout').length ) {
+  const modalLogout = $j('#modalLogout');
+
+  if (!modalLogout.length) {
     getLogoutModal();
     return;
   }
-  $j('#modalLogout').modal('show');
+  modalLogout.modal('show');
 }
 
 function getStateModal() {
@@ -1001,5 +1004,20 @@ function closeFullscreen() {
   } else if (document.msExitFullscreen) {
     /* IE11 */
     document.msExitFullscreen();
+  }
+}
+
+function toggle_password_visibility(element) {
+  const input = document.getElementById(element.getAttribute('data-password-input'));
+  if (!input) {
+    console.log("Input not found! " + element.getAttribute('data-password-input'));
+    return;
+  }
+  if (element.innerHTML=='visibility') {
+    input.type = 'text';
+    element.innerHTML = 'visibility_off';
+  } else {
+    input.type = 'password';
+    element.innerHTML='visibility';
   }
 }

@@ -11,6 +11,7 @@ function MonitorStream(monitorData) {
   this.width = monitorData.width;
   this.height = monitorData.height;
   this.janusEnabled = monitorData.janusEnabled;
+  this.janusPin = monitorData.janus_pin;
   this.scale = 100;
   this.status = {capturefps: 0, analysisfps: 0}; // json object with alarmstatus, fps etc
   this.lastAlarmState = STATE_IDLE;
@@ -114,7 +115,13 @@ function MonitorStream(monitorData) {
       }
     } else if (parseInt(width) || parseInt(height)) {
       if (width) {
-        newscale = parseInt(100*parseInt(width)/this.width);
+        if (width.search('px') != -1) {
+          newscale = parseInt(100*parseInt(width)/this.width);
+        } else { // %
+          // Set it, then get the calculated width
+          monitor_frame.css('width', width);
+          newscale = parseInt(100*parseInt(monitor_frame.width())/this.width);
+        }
       } else if (height) {
         newscale = parseInt(100*parseInt(height)/this.height);
         width = parseInt(this.width * newscale / 100)+'px';
@@ -124,10 +131,8 @@ function MonitorStream(monitorData) {
       width = Math.round(parseInt(this.width) * newscale / 100)+'px';
       height = Math.round(parseInt(this.height) * newscale / 100)+'px';
     }
-    if (width && (width != '0px') &&
-      ((monitor_frame[0].style.width===undefined) || (-1 == monitor_frame[0].style.width.search('%')))
-    ) {
-      monitor_frame.css('width', width);
+    if (width && (width != '0px')) {
+      monitor_frame.css('width', parseInt(width));
     }
     if (height && height != '0px') img.style.height = height;
 
@@ -143,6 +148,7 @@ function MonitorStream(monitorData) {
     const stream_frame = $j('#monitor'+this.id);
     if (!newscale) {
       newscale = parseInt(100*parseInt(stream_frame.width())/this.width);
+      console.log("Calculated stream scale from ", stream_frame.width(), '/', this.width, '=', newscale);
     }
     if (img.nodeName == 'IMG') {
       if (newscale > 100) newscale = 100; // we never request a larger image, as it just wastes bandwidth
@@ -186,7 +192,7 @@ function MonitorStream(monitorData) {
           janus = new Janus({server: server}); //new Janus
         }});
       }
-      attachVideo(parseInt(this.id));
+      attachVideo(parseInt(this.id), this.janusPin);
       this.statusCmdTimer = setTimeout(this.statusCmdQuery.bind(this), delay);
       return;
     }
@@ -543,25 +549,27 @@ function MonitorStream(monitorData) {
       const captureFPSValue = $j('#captureFPSValue'+this.id);
       const analysisFPSValue = $j('#analysisFPSValue'+this.id);
 
-      const fpses = respObj.monitor.FrameRate.split(",");
-      fpses.forEach(function(fps) {
-        const name_values = fps.split(':');
-        const name = name_values[0].trim();
-        const value = name_values[1].trim().toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1});
+      if (respObj.monitor.FrameRate) {
+        const fpses = respObj.monitor.FrameRate.split(",");
+        fpses.forEach(function(fps) {
+          const name_values = fps.split(':');
+          const name = name_values[0].trim();
+          const value = name_values[1].trim().toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1});
 
-        if (name == 'analysis') {
-          this.status.analysisfps = value;
-          if (analysisFPSValue.length && (analysisFPSValue.text() != value)) {
-            analysisFPSValue.text(value);
+          if (name == 'analysis') {
+            this.status.analysisfps = value;
+            if (analysisFPSValue.length && (analysisFPSValue.text() != value)) {
+              analysisFPSValue.text(value);
+            }
+          } else if (name == 'capture') {
+            if (captureFPSValue.length && (captureFPSValue.text() != value)) {
+              captureFPSValue.text(value);
+            }
+          } else {
+            console.log("Unknown fps name " + name);
           }
-        } else if (name == 'capture') {
-          if (captureFPSValue.length && (captureFPSValue.text() != value)) {
-            captureFPSValue.text(value);
-          }
-        } else {
-          console.log("Unknown fps name " + name);
-        }
-      });
+        });
+      }
 
       if (canEdit.Monitors) {
         if (monitorStatus.enabled) {
@@ -676,14 +684,14 @@ function MonitorStream(monitorData) {
   };
 } // end function MonitorStream
 
-async function attachVideo(id) {
+async function attachVideo(id, pin) {
   await waitUntil(() => janus.isConnected() );
   janus.attach({
     plugin: "janus.plugin.streaming",
     opaqueId: "streamingtest-"+Janus.randomString(12),
     success: function(pluginHandle) {
       streaming[id] = pluginHandle;
-      var body = {"request": "watch", "id": id};
+      var body = {"request": "watch", "id": id, "pin": pin};
       streaming[id].send({"message": body});
     },
     error: function(error) {

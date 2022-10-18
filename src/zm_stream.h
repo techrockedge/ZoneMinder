@@ -125,6 +125,7 @@ protected:
   int lock_fd;
   bool paused;
   int step;
+  bool send_twice;        // flag to send the same frame twice
 
   TimePoint now;
   TimePoint last_comm_update;
@@ -146,8 +147,9 @@ protected:
   VideoStream *vid_stream;
 
   CmdMsg msg;
+  bool got_command = false; // commands like zoom should output a frame even if paused
 
-  unsigned char *temp_img_buffer;     // Used when encoding or sending file data
+  uint8_t *temp_img_buffer;     // Used when encoding or sending file data
   size_t temp_img_buffer_size;
 
 protected:
@@ -155,8 +157,9 @@ protected:
   bool checkInitialised();
   void updateFrameRate(double fps);
   Image *prepareImage(Image *image);
-  bool checkCommandQueue();
+  void checkCommandQueue();
   virtual void processCommand(const CmdMsg *msg)=0;
+  void reserveTempImgBuffer(size_t size);
 
 public:
   StreamBase(): 
@@ -189,6 +192,7 @@ public:
     frame_count(0),
     last_frame_count(0),
     frame_mod(1),
+    got_command(false),
     temp_img_buffer(nullptr),
     temp_img_buffer_size(0)
   {

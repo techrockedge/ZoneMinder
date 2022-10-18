@@ -52,6 +52,7 @@
 #endif // HAVE_LIBVNC
 
 #include <algorithm>
+#include <cstring>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <chrono>
@@ -82,7 +83,7 @@ struct Namespace namespaces[] =
 std::string load_monitor_sql =
 "SELECT `Id`, `Name`, `ServerId`, `StorageId`, `Type`, `Capturing`+0, `Analysing`+0, `AnalysisSource`+0, `AnalysisImage`+0,"
 "`Recording`+0, `RecordingSource`+0, `Decoding`+0, "
-"`JanusEnabled`, `JanusAudioEnabled`, "
+"`JanusEnabled`, `JanusAudioEnabled`, `Janus_Profile_Override`, `Janus_Use_RTSP_Restream`, `Janus_RTSP_User`, "
 "`LinkedMonitors`, `EventStartCommand`, `EventEndCommand`, `AnalysisFPSLimit`, `AnalysisUpdateDelay`, `MaxFPS`, `AlarmMaxFPS`,"
 "`Device`, `Channel`, `Format`, `V4LMultiBuffer`, `V4LCapturesPerFrame`, " // V4L Settings
 "`Protocol`, `Method`, `Options`, `User`, `Pass`, `Host`, `Port`, `Path`, `SecondPath`, `Width`, `Height`, `Colours`, `Palette`, `Orientation`+0, `Deinterlacing`, "
@@ -96,9 +97,12 @@ std::string load_monitor_sql =
 "`SectionLength`, `MinSectionLength`, `FrameSkip`, `MotionFrameSkip`, "
 "`FPSReportInterval`, `RefBlendPerc`, `AlarmRefBlendPerc`, `TrackMotion`, `Exif`,"
 "`RTSPServer`, `RTSPStreamName`, `ONVIF_Alarm_Text`,"
-"`ONVIF_URL`, `ONVIF_Username`, `ONVIF_Password`, `ONVIF_Options`, `ONVIF_Event_Listener`, `use_Amcrest_API`, "
-"`SignalCheckPoints`, `SignalCheckColour`, `Importance`-1, ZoneCount FROM `Monitors`";
-
+"`ONVIF_URL`, `ONVIF_Username`, `ONVIF_Password`, `ONVIF_Options`, `ONVIF_Event_Listener`, `use_Amcrest_API`,"
+"`SignalCheckPoints`, `SignalCheckColour`, `Importance`-1, ZoneCount "
+#if MOSQUITTOPP_FOUND
+", `MQTT_Enabled`, `MQTT_Subscriptions`"
+#endif
+" FROM `Monitors`";
 
 std::string CameraType_Strings[] = {
   "Unknown",
@@ -166,13 +170,16 @@ Monitor::Monitor()
   decoding(DECODING_ALWAYS),
   janus_enabled(false),
   janus_audio_enabled(false),
+  janus_profile_override(""),
+  janus_use_rtsp_restream(false),
+  janus_rtsp_user(0),
   //protocol
   //method
   //options
   //host
   //port
-  //user
-  //pass
+  user(),
+  pass(),
   //path
   //device
   palette(0),
@@ -277,6 +284,11 @@ Monitor::Monitor()
   decoder(nullptr),
   convert_context(nullptr),
   //zones(nullptr),
+#if MOSQUITTOPP_FOUND
+  mqtt_enabled(false),
+  // mqtt_subscriptions,
+  mqtt(nullptr),
+#endif
   privacy_bitmask(nullptr),
   //linked_monitors_string
   n_linked_monitors(0),
@@ -295,13 +307,13 @@ Monitor::Monitor()
   grayscale_val(0),
   colour_val(0)
 {
-
-  if ( strcmp(config.event_close_mode, "time") == 0 )
+  if (strcmp(config.event_close_mode, "time") == 0) {
     event_close_mode = CLOSE_TIME;
-  else if ( strcmp(config.event_close_mode, "alarm") == 0 )
+  } else if (strcmp(config.event_close_mode, "alarm") == 0) {
     event_close_mode = CLOSE_ALARM;
-  else
+  } else {
     event_close_mode = CLOSE_IDLE;
+  }
 
   event = nullptr;
 
@@ -313,8 +325,7 @@ Monitor::Monitor()
 /*
    std::string load_monitor_sql =
    "SELECT `Id`, `Name`, `ServerId`, `StorageId`, `Type`, `Capturing`+0, `Analysing`+0, `AnalysisSource`+0, `AnalysisImage`+0,"
-   "`Recording`+0, `RecordingSource`+0,
-   `Decoding`+0, JanusEnabled, JanusAudioEnabled, "
+   "`Recording`+0, `RecordingSource`+0, `Decoding`+0, JanusEnabled, JanusAudioEnabled, Janus_Profile_Override, Janus_Use_RTSP_Restream, Janus_RTSP_User, "
    "LinkedMonitors, `EventStartCommand`, `EventEndCommand`, "
    "AnalysisFPSLimit, AnalysisUpdateDelay, MaxFPS, AlarmMaxFPS,"
    "Device, Channel, Format, V4LMultiBuffer, V4LCapturesPerFrame, " // V4L Settings
@@ -328,7 +339,7 @@ Monitor::Monitor()
    "FPSReportInterval, RefBlendPerc, AlarmRefBlendPerc, TrackMotion, Exif,"
    "`RTSPServer`,`RTSPStreamName`,
    "`ONVIF_URL`, `ONVIF_Username`, `ONVIF_Password`, `ONVIF_Options`, `ONVIF_Event_Listener`, `use_Amcrest_API`, "
-   "SignalCheckPoints, SignalCheckColour, Importance-1, ZoneCount FROM Monitors";
+   "SignalCheckPoints, SignalCheckColour, Importance-1, ZoneCount, `MQTT_Enabled`, `MQTT_Subscriptions` FROM Monitors";
 */
 
 void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
@@ -375,6 +386,9 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   // See below after save_jpegs for a recalculation of decoding_enabled
   janus_enabled = dbrow[col] ? atoi(dbrow[col]) : false; col++;
   janus_audio_enabled = dbrow[col] ? atoi(dbrow[col]) : false; col++;
+  janus_profile_override = std::string(dbrow[col] ? dbrow[col] : ""); col++;
+  janus_use_rtsp_restream = dbrow[col] ? atoi(dbrow[col]) : false; col++;
+  janus_rtsp_user = dbrow[col] ? atoi(dbrow[col]) : 0; col++;
 
   linked_monitors_string = dbrow[col] ? dbrow[col] : ""; col++;
   event_start_command = dbrow[col] ? dbrow[col] : ""; col++;
@@ -522,6 +536,13 @@ void Monitor::Load(MYSQL_ROW dbrow, bool load_zones=true, Purpose p = QUERY) {
   if (importance < 0) importance = 0; // Should only be >= 0
   zone_count = dbrow[col] ? atoi(dbrow[col]) : 0;// col++;
 
+#if MOSQUITTOPP_FOUND
+  mqtt_enabled = (*dbrow[col] != '0'); col++;
+  std::string mqtt_subscriptions_string = std::string(dbrow[col] ? dbrow[col] : "");
+  mqtt_subscriptions = Split(mqtt_subscriptions_string, ','); col++;
+  Error("MQTT enabled ? %d, subs %s", mqtt_enabled, mqtt_subscriptions_string.c_str());
+#endif
+
   // How many frames we need to have before we start analysing
   ready_count = std::max(warmup_count, pre_event_count);
 
@@ -619,6 +640,8 @@ void Monitor::LoadCamera() {
                                                    host, // Host
                                                    port, // Port
                                                    path, // Path
+                                                   user,
+                                                   pass,
                                                    camera_width,
                                                    camera_height,
                                                    rtsp_describe,
@@ -655,6 +678,8 @@ void Monitor::LoadCamera() {
       camera = zm::make_unique<FfmpegCamera>(this,
                                              path,
                                              second_path,
+                                             user,
+                                             pass,
                                              method,
                                              options,
                                              camera_width,
@@ -692,6 +717,8 @@ void Monitor::LoadCamera() {
 #if HAVE_LIBVLC
       camera = zm::make_unique<LibvlcCamera>(this,
                                              path.c_str(),
+                                             user,
+                                             pass,
                                              method,
                                              options,
                                              camera_width,
@@ -943,6 +970,7 @@ bool Monitor::connect() {
     shared_data->alarm_cause[0] = 0;
     shared_data->video_fifo_path[0] = 0;
     shared_data->audio_fifo_path[0] = 0;
+    shared_data->janus_pin[0] = 0;
     shared_data->last_frame_score = 0;
     shared_data->audio_frequency = -1;
     shared_data->audio_channels = -1;
@@ -1013,6 +1041,15 @@ bool Monitor::connect() {
       Janus_Manager = new JanusManager(this);
     }
 
+#if MOSQUITTOPP_FOUND
+    if (mqtt_enabled) {
+      mqtt = zm::make_unique<MQTT>(this);
+      for (const std::string &subscription : mqtt_subscriptions) {
+        if (!subscription.empty())
+          mqtt->add_subscription(subscription);
+      }
+    }
+#endif
   } else if (!shared_data->valid) {
     Error("Shared data not initialised by capture daemon for monitor %s", name.c_str());
     return false;
@@ -1082,15 +1119,17 @@ bool Monitor::disconnect() {
 }  // end bool Monitor::disconnect()
 
 Monitor::~Monitor() {
+#if MOSQUITTOPP_FOUND
+  if (mqtt) {
+    mqtt->send("offline");
+  }
+#endif
   Close();
-  Debug(1, "Done close");
 
   if (mem_ptr != nullptr) {
     if (purpose != QUERY) {
-      Debug(1, "Memsetting");
       memset(mem_ptr, 0, mem_size);
     }  // end if purpose != query
-    Debug(1, "disconnect");
     disconnect();
   }  // end if mem_ptr
 
@@ -1099,25 +1138,18 @@ Monitor::~Monitor() {
   decoder_it = nullptr;
 
   delete storage;
-  Debug(1, "Done storage");
   delete linked_monitors;
   linked_monitors = nullptr;
 
-  Debug(1, "Don linked monitors");
   if (video_fifo) delete video_fifo;
   if (audio_fifo) delete audio_fifo;
-  Debug(1, "Don fifo");
   if (convert_context) {
-  Debug(1, "Don fifo");
     sws_freeContext(convert_context);
     convert_context = nullptr;
   }
-  Debug(1, "Don fifo");
   if (Amcrest_Manager != nullptr) {
-  Debug(1, "Don fifo");
     delete Amcrest_Manager;
   } else {
-Debug(1, "No amcrest");
   }
 }  // end Monitor::~Monitor()
 
@@ -1668,6 +1700,11 @@ void Monitor::UpdateFPS() {
       Info("%s: %d - Capturing at %.2lf fps, capturing bandwidth %ubytes/sec Analysing at %.2lf fps",
           name.c_str(), image_count, new_capture_fps, new_capture_bandwidth, new_analysis_fps);
 
+#if MOSQUITTOPP_FOUND
+      if (mqtt) mqtt->send(stringtf("Capturing at %.2lf fps, capturing bandwidth %ubytes/sec Analysing at %.2lf fps",
+          new_capture_fps, new_capture_bandwidth, new_analysis_fps));
+#endif
+
       shared_data->capture_fps = new_capture_fps;
       last_fps_time = now;
       last_capture_image_count = image_count;
@@ -1676,7 +1713,7 @@ void Monitor::UpdateFPS() {
       last_camera_bytes = new_camera_bytes;
 
       std::string sql = stringtf(
-          "UPDATE LOW_PRIORITY Monitor_Status SET CaptureFPS = %.2lf, CaptureBandwidth=%u, AnalysisFPS = %.2lf WHERE MonitorId=%u",
+          "UPDATE LOW_PRIORITY Monitor_Status SET CaptureFPS = %.2lf, CaptureBandwidth=%u, AnalysisFPS = %.2lf, UpdatedOn=NOW() WHERE MonitorId=%u",
           new_capture_fps, new_capture_bandwidth, new_analysis_fps, id);
       dbQueue.push(std::move(sql));
     } // now != last_fps_time
@@ -1738,7 +1775,6 @@ bool Monitor::Poll() {
     }
   }
   if (janus_enabled) {
-
     if (Janus_Manager->check_janus() == 0) {
       Janus_Manager->add_to_janus();
     }
@@ -1916,13 +1952,9 @@ bool Monitor::Analyse() {
 
           /* try to stay behind the decoder. */
           if (decoding != DECODING_NONE) {
-            while (!snap->decoded and !zm_terminate and !analysis_thread->Stopped()) {
-              // Need to wait for the decoder thread.
-              packetqueue.notify_all();
-              Debug(1, "Waiting for decode");
-              packet_lock->wait();
-            }  // end while ! decoded
-            if (zm_terminate or analysis_thread->Stopped()) {
+            if (!snap->decoded) {
+              // We no longer wait because we need to be checking the triggers and other inputs.
+              // Also the logic is too hairy.  capture process can delete the packet that we have here.
               delete packet_lock;
               return false;
             }
@@ -2045,31 +2077,32 @@ bool Monitor::Analyse() {
           // If motion detecting, score will be > 0 on motion, but if skipping frames, might not be. So also test snap->score
           if ((score > 0) or (snap->score > 0)) {
             if ((state == IDLE) || (state == TAPE) || (state == PREALARM)) {
-              // If we should end then previous continuous event and start a new non-continuous event
-              if (event && event->Frames()
-                  && (event->AlarmFrames() < alarm_frame_count)
-                  && (event_close_mode == CLOSE_ALARM)
-                  // FIXME since we won't be including this snap in the event if we close it, we should be looking at event->duration() instead
-                  && (event->Duration() >= min_section_length)
-                  && ((!pre_event_count) || (Event::PreAlarmCount() >= alarm_frame_count - 1))) {
-                Info("%s: %03d - Closing event %" PRIu64 ", continuous end, alarm begins",
-                    name.c_str(), snap->image_index, event->Id());
-                closeEvent();
-              } else if (event) {
-                // This is so if we need more than 1 alarm frame before going into alarm, so it is basically if we have enough alarm frames
-                Debug(3,
-                      "pre_alarm_count in event %d of %d, event frames %d, alarm frames %d event length %" PRIi64 " >=? %" PRIi64 " min close mode is ALARM? %d",
-                      Event::PreAlarmCount(), pre_event_count,
-                      event->Frames(),
-                      event->AlarmFrames(),
-                      static_cast<int64>(std::chrono::duration_cast<Seconds>(event->Duration()).count()),
-                      static_cast<int64>(Seconds(min_section_length).count()),
-                      (event_close_mode == CLOSE_ALARM));
-              }
+
               if ((!pre_event_count) || (Event::PreAlarmCount() >= alarm_frame_count-1)) {
                 Info("%s: %03d - ExtAlm - Gone into alarm state PreAlarmCount: %u > AlarmFrameCount:%u Cause:%s",
                     name.c_str(), snap->image_index, Event::PreAlarmCount(), alarm_frame_count, cause.c_str());
                 shared_data->state = state = ALARM;
+
+                // If we should end then previous continuous event and start a new non-continuous event
+                if (event && event->Frames()
+                    && (event->AlarmFrames() < alarm_frame_count)
+                    && (event_close_mode == CLOSE_ALARM)
+                    && (event->Duration() >= min_section_length)
+                    ) {
+                  Info("%s: %03d - Closing event %" PRIu64 ", continuous end, alarm begins",
+                      name.c_str(), snap->image_index, event->Id());
+                  closeEvent();
+                } else if (event) {
+                  // This is so if we need more than 1 alarm frame before going into alarm, so it is basically if we have enough alarm frames
+                  Debug(3,
+                        "pre_alarm_count in event %d of %d, event frames %d, alarm frames %d event length %" PRIi64 " >=? %" PRIi64 " min close mode is ALARM? %d",
+                        Event::PreAlarmCount(), pre_event_count,
+                        event->Frames(),
+                        event->AlarmFrames(),
+                        static_cast<int64>(std::chrono::duration_cast<Seconds>(event->Duration()).count()),
+                        static_cast<int64>(Seconds(min_section_length).count()),
+                        (event_close_mode == CLOSE_ALARM));
+                }
 
               } else if (state != PREALARM) {
                 Info("%s: %03d - Gone into prealarm state", name.c_str(), analysis_image_count);
@@ -2129,11 +2162,12 @@ bool Monitor::Analyse() {
               shared_data->state = state = ((shared_data->recording == RECORDING_ALWAYS) ? IDLE : TAPE);
             } else {
               Debug(1,
-                    "State %d %s because analysis_image_count(%d)-last_alarm_count(%d) > post_event_count(%d) and timestamp.tv_sec(%" PRIi64 ") - recording.tv_src(%" PRIi64 ") >= min_section_length(%" PRIi64 ")",
+                    "State %d %s because analysis_image_count(%d)-last_alarm_count(%d) = %d > post_event_count(%d) and timestamp.tv_sec(%" PRIi64 ") - recording.tv_src(%" PRIi64 ") >= min_section_length(%" PRIi64 ")",
                     state,
                     State_Strings[state].c_str(),
                     analysis_image_count,
                     last_alarm_count,
+                    analysis_image_count - last_alarm_count,
                     post_event_count,
                     static_cast<int64>(std::chrono::duration_cast<Seconds>(snap->timestamp.time_since_epoch()).count()),
                     static_cast<int64>(std::chrono::duration_cast<Seconds>(GetVideoWriterStartTime().time_since_epoch()).count()),
@@ -2152,8 +2186,6 @@ bool Monitor::Analyse() {
             Event::AddPreAlarmFrame(snap->image, snap->timestamp, score, nullptr);
           } else if (state == ALARM) {
             if (event) {
-              if (noteSetMap.size() > 0)
-                event->updateNotes(noteSetMap);
               if (section_length >= Seconds(min_section_length) && (event->Duration() >= section_length)) {
                 Warning("%s: %03d - event %" PRIu64 ", has exceeded desired section length. %" PRIi64 " - %" PRIi64 " = %" PRIi64 " >= %" PRIi64,
                         name.c_str(), analysis_image_count, event->Id(),
@@ -2163,6 +2195,8 @@ bool Monitor::Analyse() {
                         static_cast<int64>(Seconds(section_length).count()));
                 closeEvent();
                 event = openEvent(snap, cause, noteSetMap);
+              } else if (noteSetMap.size() > 0) {
+                event->updateNotes(noteSetMap);
               }
             } else if (shared_data->recording != RECORDING_NONE) {
               event = openEvent(snap, cause, noteSetMap);
@@ -2176,8 +2210,18 @@ bool Monitor::Analyse() {
             // Alert means this frame has no motion, but we were alarmed and are still recording.
             if ((noteSetMap.size() > 0) and event)
               event->updateNotes(noteSetMap);
-          } else if (state == TAPE) {
-            // bulk frame code moved to event.
+          } else if (state == TAPE || state == IDLE) {
+            if (event) {
+              if (section_length >= Seconds(min_section_length) && (event->Duration() >= section_length)) {
+                Debug(1, "%s: event %" PRIu64 ", has exceeded desired section length. %" PRIi64 " - %" PRIi64 " = %" PRIi64 " >= %" PRIi64,
+                        name.c_str(), event->Id(),
+                        static_cast<int64>(std::chrono::duration_cast<Seconds>(snap->timestamp.time_since_epoch()).count()),
+                        static_cast<int64>(std::chrono::duration_cast<Seconds>(event->StartTime().time_since_epoch()).count()),
+                        static_cast<int64>(std::chrono::duration_cast<Seconds>(event->Duration()).count()),
+                        static_cast<int64>(Seconds(section_length).count()));
+                closeEvent();
+              }
+            }
           } // end if state machine
 
           if (shared_data->recording > RECORDING_NONE) {
@@ -2628,11 +2672,13 @@ bool Monitor::Decode() {
           }  // end if have convert_context
         }  // end if need transfer to image
       } else {
-        Debug(1, "No packet.size(%d) or packet->in_frame(%p). Not decoding", packet->packet->size, packet->in_frame.get());
+        Debug(1, "Ret from decode %d, zm_terminate %d", ret, zm_terminate);
       }
     } else {
       Debug(1, "Not Decoding ? %s", Decoding_Strings[decoding].c_str());
     } // end if doing decoding
+  } else {
+    Debug(1, "No packet.size(%d) or packet->in_frame(%p). Not decoding", packet->packet->size, packet->in_frame.get());
   }  // end if need_decoding
 
   if (packet->image) {
@@ -2722,41 +2768,49 @@ bool Monitor::Decode() {
   return true;
 }  // end bool Monitor::Decode()
 
-void Monitor::TimestampImage(Image *ts_image, SystemTimePoint ts_time) const {
-  if (!label_format[0])
-    return;
+
+std::string Monitor::Substitute(const std::string &format, SystemTimePoint ts_time) const {
+  if (format.empty()) return "";
+
+  std::string text;
+  text.reserve(1024);
 
   // Expand the strftime macros first
   char label_time_text[256];
   tm ts_tm = {};
   time_t ts_time_t = std::chrono::system_clock::to_time_t(ts_time);
-  strftime(label_time_text, sizeof(label_time_text), label_format.c_str(), localtime_r(&ts_time_t, &ts_tm));
+  strftime(label_time_text, sizeof(label_time_text), format.c_str(), localtime_r(&ts_time_t, &ts_tm));
 
-  char label_text[1024];
   const char *s_ptr = label_time_text;
-  char *d_ptr = label_text;
+  char *d_ptr = text.data();
 
-  while (*s_ptr && ((unsigned int)(d_ptr - label_text) < (unsigned int) sizeof(label_text))) {
-    if ( *s_ptr == config.timestamp_code_char[0] ) {
+  while (*s_ptr && ((unsigned int)(d_ptr - text.data()) < text.capacity())) {
+    if (*s_ptr == config.timestamp_code_char[0]) {
+      const auto max_len = text.capacity() - (d_ptr - text.data());
       bool found_macro = false;
+      int rc = 0;
       switch ( *(s_ptr+1) ) {
         case 'N' :
-          d_ptr += snprintf(d_ptr, sizeof(label_text)-(d_ptr-label_text), "%s", name.c_str());
+          rc = snprintf(d_ptr, max_len, "%s", name.c_str());
           found_macro = true;
           break;
         case 'Q' :
-          d_ptr += snprintf(d_ptr, sizeof(label_text)-(d_ptr-label_text), "%s", trigger_data->trigger_showtext);
+          rc = snprintf(d_ptr, max_len, "%s", trigger_data->trigger_showtext);
           found_macro = true;
           break;
         case 'f' :
           typedef std::chrono::duration<int64, std::centi> Centiseconds;
           Centiseconds centi_sec = std::chrono::duration_cast<Centiseconds>(
               ts_time.time_since_epoch() - std::chrono::duration_cast<Seconds>(ts_time.time_since_epoch()));
-          d_ptr += snprintf(d_ptr, sizeof(label_text) - (d_ptr - label_text), "%02lld", static_cast<long long int>(centi_sec.count()));
+          rc = snprintf(d_ptr, max_len, "%02lld", static_cast<long long int>(centi_sec.count()));
           found_macro = true;
           break;
       }
-      if ( found_macro ) {
+      if (rc < 0 || static_cast<size_t>(rc) > max_len) {
+        break;
+      }
+      d_ptr += rc;
+      if (found_macro) {
         s_ptr += 2;
         continue;
       }
@@ -2764,9 +2818,16 @@ void Monitor::TimestampImage(Image *ts_image, SystemTimePoint ts_time) const {
     *d_ptr++ = *s_ptr++;
   } // end while
   *d_ptr = '\0';
-  Debug(2, "annotating %s", label_text);
-  ts_image->Annotate(label_text, label_coord, label_size);
-  Debug(2, "done annotating %s", label_text);
+  return text;
+}
+
+void Monitor::TimestampImage(Image *ts_image, SystemTimePoint ts_time) const {
+  if (!label_format[0])
+    return;
+  const std::string label_text = Substitute(label_format, ts_time);
+
+  ts_image->Annotate(label_text.c_str(), label_coord, label_size);
+  Debug(2, "done annotating %s", label_text.c_str());
 } // end void Monitor::TimestampImage
 
 Event * Monitor::openEvent(
@@ -2801,7 +2862,12 @@ Event * Monitor::openEvent(
   event = new Event(this, starting_packet->timestamp, cause, noteSetMap);
 
   shared_data->last_event_id = event->Id();
+  SetVideoWriterStartTime(starting_packet->timestamp);
   strncpy(shared_data->alarm_cause, cause.c_str(), sizeof(shared_data->alarm_cause)-1);
+
+#if MOSQUITTOPP_FOUND
+  if (mqtt) mqtt->send(stringtf("event start: %" PRId64, event->Id()));
+#endif
 
   if (!event_start_command.empty()) {
     if (fork() == 0) {
@@ -2841,11 +2907,15 @@ void Monitor::closeEvent() {
   } else {
     Debug(1, "close event thread is not joinable");
   }
+#if MOSQUITTOPP_FOUND
+  if (mqtt) mqtt->send(stringtf("event end: %" PRId64, event->Id()));
+#endif
   Debug(1, "Starting thread to close event");
   close_event_thread = std::thread([](Event *e, const std::string &command){
         int64_t event_id = e->Id();
         int monitor_id = e->MonitorId();
         delete e;
+
 
         if (!command.empty()) {
           if (fork() == 0) {
@@ -2856,7 +2926,6 @@ void Monitor::closeEvent() {
             Error("Error execing %s", command.c_str());
           }
         }
-
       }, event, event_end_command);
   Debug(1, "Nulling event");
   event = nullptr;
