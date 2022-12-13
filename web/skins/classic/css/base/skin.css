@@ -410,7 +410,8 @@ ul.tabList li.active a {
     white-space: nowrap;
 }
 
-div.clear {
+div.clear,
+br.clear {
     clear: both;
 }
 
@@ -598,9 +599,11 @@ input[type=submit]:disabled,
 .btn-primary:disabled {
     background-color: #aaaaaa;    
     border-color: #bbbbbb;
-
 }
 
+#navbar-container {
+  padding: 0;
+}
 
 .navbar{
 	margin-bottom: 0 !important;
@@ -626,11 +629,8 @@ color:#ffa801;
   border:none;
 }
 
-
-
 .container-fluid {
   position: relative;
-  padding-bottom: 10px;
 }
 
 .sidebar {
@@ -753,6 +753,7 @@ a.flip {
   padding: 4px 0 0 0;
 }
 #logoutButton {
+  color: white;
   padding: 4px 10px 7px 10px;
 }
 #stateModalBtn {

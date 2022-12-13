@@ -74,7 +74,7 @@ bool StreamBase::checkInitialised() {
     return false;
   }
   if (!monitor->ShmValid()) {
-    Error("Monitor shm is not connected");
+    Debug(1, "Monitor shm is not connected");
     return false;
   }
   if ((monitor->GetType() == Monitor::FFMPEG) and (monitor->Decoding() == Monitor::DECODING_NONE) ) {
@@ -385,6 +385,9 @@ void StreamBase::openComms() {
     snprintf(rem_sock_path, sizeof(rem_sock_path), "%s/zms-%06dw.sock", staticConfig.PATH_SOCKS.c_str(), connkey);
     strncpy(rem_addr.sun_path, rem_sock_path, sizeof(rem_addr.sun_path));
     rem_addr.sun_family = AF_UNIX;
+
+    struct timeval tv{1,0}; /* 1 Secs Timeout */
+    setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO,(struct timeval *)&tv, sizeof(struct timeval));
 
     last_comm_update = std::chrono::steady_clock::now();
     Debug(3, "comms open at %s", loc_sock_path);

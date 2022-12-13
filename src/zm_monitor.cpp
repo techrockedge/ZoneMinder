@@ -623,6 +623,8 @@ void Monitor::LoadCamera() {
                                                    host,
                                                    port,
                                                    path,
+                                                   user,
+                                                   pass,
                                                    camera_width,
                                                    camera_height,
                                                    colours,
@@ -1713,7 +1715,7 @@ void Monitor::UpdateFPS() {
       last_camera_bytes = new_camera_bytes;
 
       std::string sql = stringtf(
-          "UPDATE LOW_PRIORITY Monitor_Status SET CaptureFPS = %.2lf, CaptureBandwidth=%u, AnalysisFPS = %.2lf, UpdatedOn=NOW() WHERE MonitorId=%u",
+          "UPDATE LOW_PRIORITY Monitor_Status SET Status='Connected', CaptureFPS = %.2lf, CaptureBandwidth=%u, AnalysisFPS = %.2lf, UpdatedOn=NOW() WHERE MonitorId=%u",
           new_capture_fps, new_capture_bandwidth, new_analysis_fps, id);
       dbQueue.push(std::move(sql));
     } // now != last_fps_time
@@ -1874,15 +1876,9 @@ bool Monitor::Analyse() {
           } else {
             event->addNote(SIGNAL_CAUSE, "Reacquired");
           }
-          if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame && (
-                ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
-                ||
-                ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
-                ) ) {
+          if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->y_image) {
             Debug(1, "assigning refimage from y-channel");
-            Image y_image(snap->in_frame->width,
-                snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
-            ref_image.Assign(y_image);
+            ref_image.Assign(*(snap->y_image));
           } else if (snap->image) {
             Debug(1, "assigning refimage from snap->image");
             ref_image.Assign(*(snap->image));
@@ -1976,14 +1972,9 @@ bool Monitor::Analyse() {
               // decoder may not have been able to provide an image
               if (!ref_image.Buffer()) {
                 Debug(1, "Assigning instead of Detecting");
-                if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame && (
-                      ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
-                      ||
-                      ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
-                      ) ) {
+                if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->y_image) {
                   Debug(1, "assigning refimage from y-channel");
-                  Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
-                  ref_image.Assign(y_image);
+                  ref_image.Assign(*(snap->y_image));
                 } else {
                   Debug(1, "assigning refimage from snap->image");
                   ref_image.Assign(*(snap->image));
@@ -1994,13 +1985,8 @@ bool Monitor::Analyse() {
                 if (!(analysis_image_count % (motion_frame_skip+1))) {
                   Debug(1, "Detecting motion on image %d, image %p", snap->image_index, snap->image);
                   // Get new score.
-                  if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame && (
-                        ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P)
-                        ||
-                        ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
-                        ) ) {
-                    Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
-                    snap->score = DetectMotion(y_image, zoneSet);
+                  if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->y_image) {
+                    snap->score = DetectMotion(*(snap->y_image), zoneSet);
                   } else {
                     snap->score = DetectMotion(*(snap->image), zoneSet);
                   }
@@ -2040,16 +2026,9 @@ bool Monitor::Analyse() {
                   alarm_image.Assign(*(snap->image));
                 }
 
-                if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->in_frame &&
-                    ( 
-                     ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUV420P) 
-                     ||
-                     ((AVPixelFormat)snap->in_frame->format == AV_PIX_FMT_YUVJ420P)
-                    )
-                   ) {
+                if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && snap->y_image) {
                   Debug(1, "Blending from y-channel");
-                  Image y_image(snap->in_frame->width, snap->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, snap->in_frame->data[0], 0);
-                  ref_image.Blend(y_image, ( state==ALARM ? alarm_ref_blend_perc : ref_blend_perc ));
+                  ref_image.Blend(*(snap->y_image), ( state==ALARM ? alarm_ref_blend_perc : ref_blend_perc ));
                 } else if (snap->image) {
                   Debug(1, "Blending full colour image because analysis_image = %d, in_frame=%p and format %d != %d, %d",
                       analysis_image, snap->in_frame.get(),
@@ -2113,7 +2092,7 @@ bool Monitor::Analyse() {
               Debug(1, "%s: %03d - Alarmed frame while in alert state. Consecutive alarmed frames left to return to alarm state: %03d",
                   name.c_str(), analysis_image_count, alert_to_alarm_frame_count);
               if (alert_to_alarm_frame_count == 0) {
-                Info("%s: %03d - ExtAlm - Gone back into alarm state Cause:ONVIF", name.c_str(), analysis_image_count);
+                Info("%s: %03d - ExtAlm - Gone back into alarm state", name.c_str(), analysis_image_count);
                 shared_data->state = state = ALARM;
               }
             } else if (state == TAPE) {
@@ -2199,11 +2178,12 @@ bool Monitor::Analyse() {
                 event->updateNotes(noteSetMap);
               }
             } else if (shared_data->recording != RECORDING_NONE) {
-              event = openEvent(snap, cause, noteSetMap);
-              Info("%s: %03d - Opening new event %" PRIu64 ", alarm start", name.c_str(), analysis_image_count, event->Id());
-              if (alarm_frame_count) {
-                Debug(1, "alarm frame count so SavePreAlarmFrames");
-                event->SavePreAlarmFrames();
+              if ((event = openEvent(snap, cause, noteSetMap)) != nullptr) {
+                Info("%s: %03d - Opening new event %" PRIu64 ", alarm start", name.c_str(), analysis_image_count, event->Id());
+                if (alarm_frame_count) {
+                  Debug(1, "alarm frame count so SavePreAlarmFrames");
+                  event->SavePreAlarmFrames();
+                }
               }
             }
           } else if (state == ALERT) {
@@ -2245,14 +2225,14 @@ bool Monitor::Analyse() {
             }  // end if event
 
             if (!event and (shared_data->recording == RECORDING_ALWAYS)) {
-              event = openEvent(snap, cause.empty() ? "Continuous" : cause, noteSetMap);
-
-              Info("%s: %03d - Opened new event %" PRIu64 ", continuous section start",
-                  name.c_str(), analysis_image_count, event->Id());
-              /* To prevent cancelling out an existing alert\prealarm\alarm state */
-              // This ignores current score status.  This should all come after the state machine calculations
-              if (state == IDLE) {
-                shared_data->state = state = TAPE;
+              if ((event = openEvent(snap, cause.empty() ? "Continuous" : cause, noteSetMap)) != nullptr) {
+                Info("%s: %03d - Opened new event %" PRIu64 ", continuous section start",
+                    name.c_str(), analysis_image_count, event->Id());
+                /* To prevent cancelling out an existing alert\prealarm\alarm state */
+                // This ignores current score status.  This should all come after the state machine calculations
+                if (state == IDLE) {
+                  shared_data->state = state = TAPE;
+                }
               }
             } // end if ! event
           } // end if RECORDING
@@ -2680,6 +2660,30 @@ bool Monitor::Decode() {
   } else {
     Debug(1, "No packet.size(%d) or packet->in_frame(%p). Not decoding", packet->packet->size, packet->in_frame.get());
   }  // end if need_decoding
+
+  if ((analysis_image == ANALYSISIMAGE_YCHANNEL) && packet->in_frame && (
+        ((AVPixelFormat)packet->in_frame->format == AV_PIX_FMT_YUV420P)
+        ||
+        ((AVPixelFormat)packet->in_frame->format == AV_PIX_FMT_YUVJ420P)
+        ) ) {
+    packet->y_image = new Image(packet->in_frame->width, packet->in_frame->height, 1, ZM_SUBPIX_ORDER_NONE, packet->in_frame->data[0], 0);
+    if (orientation != ROTATE_0) {
+      switch (orientation) {
+        case ROTATE_0 :
+          // No action required
+          break;
+        case ROTATE_90 :
+        case ROTATE_180 :
+        case ROTATE_270 :
+          packet->y_image->Rotate((orientation-1)*90);
+          break;
+        case FLIP_HORI :
+        case FLIP_VERT :
+          packet->y_image->Flip(orientation==FLIP_HORI);
+          break;
+      }
+    } // end if have rotation
+  }
 
   if (packet->image) {
     Image* capture_image = packet->image;

@@ -177,7 +177,7 @@ function MonitorStream(monitorData) {
 
   this.start = function(delay) {
     if (this.janusEnabled) {
-      var server;
+      let server;
       if (ZM_JANUS_PATH) {
         server = ZM_JANUS_PATH;
       } else if (window.location.protocol=='https:') {
@@ -240,6 +240,11 @@ function MonitorStream(monitorData) {
     this.streamCmdTimer = clearTimeout(this.streamCmdTimer);
   };
   this.kill = function() {
+    if (janus) {
+      if (streaming[this.id]) {
+        streaming[this.id].detach();
+      }
+    }
     const stream = this.getElement();
     if (!stream) return;
     stream.onerror = null;
@@ -657,7 +662,10 @@ function MonitorStream(monitorData) {
 
     this.ajaxQueue = jQuery.ajaxQueue({
       url: this.url,
-      data: alarmCmdParms, dataType: "json"})
+      xhrFields: {withCredentials: true},
+      data: alarmCmdParms,
+      dataType: "json"
+    })
         .done(this.getStreamCmdResponse.bind(this))
         .fail(this.onFailure.bind(this));
   };
@@ -671,7 +679,12 @@ function MonitorStream(monitorData) {
     }
 
     this.streamCmdReq = function(streamCmdParms) {
-      this.ajaxQueue = jQuery.ajaxQueue({url: this.url, data: streamCmdParms, dataType: "json"})
+      this.ajaxQueue = jQuery.ajaxQueue({
+        url: this.url,
+        xhrFields: {withCredentials: true},
+        data: streamCmdParms,
+        dataType: "json"
+      })
           .done(this.getStreamCmdResponse.bind(this))
           .fail(this.onFailure.bind(this));
     };

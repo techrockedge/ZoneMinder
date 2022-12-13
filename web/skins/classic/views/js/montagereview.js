@@ -336,7 +336,7 @@ function timerFire() {
   } else if (currentTimeSecs + playSecsPerInterval >= maxTimeSecs) {
     // beyond the end just stop
     console.log("Current time " + currentTimeSecs + " + " + playSecsPerInterval + " >= " + maxTimeSecs + " so stopping");
-    setSpeed(0);
+    if (speedIndex) setSpeed(0);
     outputUpdate(currentTimeSecs);
   } else {
     //console.log("Current time " + currentTimeSecs + " + " + playSecsPerInterval);
@@ -691,6 +691,7 @@ function setSpeed(speed_index) {
   }
   currentSpeed = parseFloat(speeds[speed_index]);
   speedIndex = speed_index;
+  console.log(speedIndex);
   playSecsPerInterval = Math.floor( 1000 * currentSpeed * currentDisplayInterval ) / 1000000;
   showSpeed(speed_index);
   timerFire();
@@ -1130,6 +1131,30 @@ function initPage() {
     this.form.submit();
   });
 }
+
+function takeSnapshot() {
+  monitor_ids = [];
+  for (const key in monitorIndex) {
+    monitor_ids[monitor_ids.length] = key;
+  }
+  post('?view=snapshot', {'action': 'create', 'monitor_ids[]': monitor_ids});
+
+  /*
+   * Alternate implementation using the API
+  server = new Server(Servers[serverId]);
+  $j.ajax({
+    method: 'POST',
+    url: server.UrlToApi()+'/snapshots.json' + (auth_relay ? '?' + auth_relay : ''),
+    data: { 'monitor_ids[]': monitorIndex.keys()},
+    success: function(response) {
+      console.log(response);
+    }
+  });
+  //console.log(monitor_ids);
+  //window.location = '?view=snapshot&action=create&'+monitor_ids.join('&');
+*/
+}
+
 window.addEventListener("resize", redrawScreen, {passive: true});
 // Kick everything off
 window.addEventListener('DOMContentLoaded', initPage);

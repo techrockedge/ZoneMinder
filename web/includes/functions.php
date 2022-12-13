@@ -76,6 +76,7 @@ function CORSHeaders() {
       if ( ZM_MIN_STREAMING_PORT ) {
         ZM\Debug('Setting default Access-Control-Allow-Origin from ' . $_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
+        header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Headers: x-requested-with,x-request');
       }
       return;
@@ -89,6 +90,7 @@ function CORSHeaders() {
         $valid = true;
         ZM\Debug('Setting Access-Control-Allow-Origin from '.$_SERVER['HTTP_ORIGIN']);
         header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
+        header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Headers: x-requested-with,x-request');
         break;
       }
@@ -254,8 +256,8 @@ function getImageStreamHTML( $id, $src, $width, $height, $title='' ) {
       return '<iframe id="'.$id.'" src="'.$src.'" alt="'. validHtmlStr($title) .'" '.($width? ' width="'. validInt($width).'"' : '').($height?' height="'.validInt($height).'"' : '' ).'/>';
   } else {
       return '<img id="'.$id.'" src="'.$src.'" alt="'. validHtmlStr($title) .'" style="'.
-      #(($width and $width !='auto') ?'width:'.$width.';' : '').
-      (($height and $height != 'auto')?' height:'.$height.';':'').
+      (($width and ($width !='auto')) ?'width:'.$width.';' : '').
+      (($height and ($height != 'auto'))?' height:'.$height.';':'').
       '" />';
   }
 }
@@ -470,7 +472,7 @@ function htmlOptions($options, $values) {
       $text = $option;
     }
     $selected = false;
-    if ($values) {
+    if ($values !== null) {
       $selected = is_array($values) ? in_array($value, $values) : (!strcmp($value, $values));
       if ( !$has_selected ) 
         $has_selected = $selected;
@@ -2216,6 +2218,19 @@ function array_recursive_diff($aArray1, $aArray2) {
   return $aReturn;
 }
 
+function html_input($name, $type='text', $value='', $options=array()) {
+  $html = '<input ';
+  $attributes = [];
+  $options = array_merge($options, ['name'=>$name, 'value'=>$value, 'type'=>$type]);
+
+  foreach (array_keys($options) as $k) {
+    $attributes[] = $k.'="'.$options[$k].'"';
+  }
+  $html .= join(' ', $attributes);
+  $html .= '/>';
+  return $html;
+}
+
 function html_radio($name, $values, $selected=null, $options=array(), $attrs=array()) {
 
   $html = '';
@@ -2421,4 +2436,10 @@ function output_file($path, $chunkSize=1024) {
 
   return ((connection_status() == 0) and !connection_aborted());
 } # end function output_file
+
+function array_to_hash_by_key($key, $array) {
+  $results = array();
+  foreach ($array as $a) { $results[$a->$key()] = $a; }
+  return $results;
+}
 ?>

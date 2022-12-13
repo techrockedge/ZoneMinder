@@ -82,6 +82,21 @@ class Event extends ZM_Object {
     return $this->{'SecondaryStorage'};
   }
 
+  public function Length(){
+    if(! isset($this->{'Length'})){
+      //TODO: Do something when no Length found
+    }
+    return $this->{'Length'};
+    
+  }
+
+  public function Frames(){
+    if(! isset($this->{'Frames'})){
+      //TOOD: Do something when no Frames found
+    }
+    return $this->{'Frames'};
+  }
+  
   public function Monitor() {
     if ( isset($this->{'MonitorId'}) ) {
       $Monitor = Monitor::find_one(array('Id'=>$this->{'MonitorId'}));
@@ -628,12 +643,8 @@ class Event extends ZM_Object {
       # auth turned on and not logged in
       return false;
     }
-    if (!empty($u['MonitorIds']) ) {
-      if (in_array($this->{'MonitorId'}, explode(',', $u['MonitorIds']))) {
-        return true;
-      }
-      return false;
-    }
+    if (!$this->Monitor()->canView($u)) return false;
+
     if ($u['Events'] != 'None') {
       return true;
     }
@@ -651,11 +662,7 @@ class Event extends ZM_Object {
       # auth turned on and not logged in
       return false;
     }
-    if (!empty($u['MonitorIds']) ) {
-      if (!in_array($this->{'MonitorId'}, explode(',', $u['MonitorIds']))) {
-        return false;
-      }
-    }
+    if (!$this->Monitor()->canView($u)) return false;
     if ($u['Events'] != 'Edit') {
       return false;
     }
