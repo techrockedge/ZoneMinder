@@ -22,7 +22,7 @@ permissions:
 jobs:
   tarball:
     name: Build full source tarball
-    if: github.repository == 'ZoneMinder/zoneminder' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'techrockedge/ZoneMinder' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Determine release tag
